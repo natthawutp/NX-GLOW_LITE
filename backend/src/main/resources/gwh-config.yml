@@ -1,0 +1,950 @@
+# ============================================================
+# GWH Master Configuration
+# Comprehensive configuration derived from GWH Legacy WMS
+# (GwhCommon cm* modules) mapped to GWH Modern WMS.
+#
+# Source: GWH_Git/GWH/GwhCommon/GwhCommon-api/.../common/cm/
+# Tables: SGWH0001.GWH_TM_* (Master Tables)
+#
+# Bind with: @ConfigurationProperties(prefix = "gwh.master")
+# ============================================================
+
+gwh:
+  master:
+
+    # ==========================================================
+    # PIK (Picking Key) Field Definitions  (1-7)
+    # ==========================================================
+    # Legacy: cm/cmpik/dto/GwhCmpikDTO.java (38 fields)
+    # Table:  GWH_TM_PIK
+    # Keys:   PIK_CPNY_COD, PIK_WHS_COD, PIK_CUST_COD, PIK_NUM
+    #
+    # PIK columns appear in: AVD_PIK1-7, AVR_PIK1-7, SPD_PIK1-7,
+    #   SPR_PIK1-7, SPPD_PIK1-7, ST_PIK1-7, STKH_PIK1-7
+    # All NVARCHAR2(60)
+    # dataType: STRING | DATE | NUMBER
+    # ==========================================================
+    pik:
+      slots:
+        - slot: 1
+          columnSuffix: PIK1
+          label: "Lot Number"
+          labelJa: "ロット番号"
+          enabled: true
+          required: false
+          dataType: STRING
+          maxLength: 60
+          allocationKey: true
+          description: "Manufacturer lot or batch number for stock allocation"
+
+        - slot: 2
+          columnSuffix: PIK2
+          label: "Expiry Date"
+          labelJa: "賞味期限"
+          enabled: true
+          required: false
+          dataType: DATE
+          maxLength: 60
+          allocationKey: true
+          description: "Product expiry or best-before date; drives FEFO allocation"
+
+        - slot: 3
+          columnSuffix: PIK3
+          label: "Serial Number"
+          labelJa: "シリアル番号"
+          enabled: false
+          required: false
+          dataType: STRING
+          maxLength: 60
+          allocationKey: true
+          description: "Individual item serial number for serialized stock control"
+
+        - slot: 4
+          columnSuffix: PIK4
+          label: "Purchase Order No"
+          labelJa: "発注番号"
+          enabled: true
+          required: false
+          dataType: STRING
+          maxLength: 60
+          allocationKey: false
+          description: "Customer PO reference, carried from arrival through shipping"
+
+        - slot: 5
+          columnSuffix: PIK5
+          label: "Production Date"
+          labelJa: "製造日"
+          enabled: false
+          required: false
+          dataType: DATE
+          maxLength: 60
+          allocationKey: false
+          description: "Date of manufacture; reference only"
+
+        - slot: 6
+          columnSuffix: PIK6
+          label: "Country of Origin"
+          labelJa: "原産国"
+          enabled: false
+          required: false
+          dataType: STRING
+          maxLength: 60
+          allocationKey: false
+          description: "ISO country code of product origin; reference only"
+
+        - slot: 7
+          columnSuffix: PIK7
+          label: "Custom Reference"
+          labelJa: "カスタム参照"
+          enabled: false
+          required: false
+          dataType: STRING
+          maxLength: 60
+          allocationKey: false
+          description: "Customer-specific free-text reference field"
+
+      # --- Picking master-level defaults (GWH_TM_PIK) ---
+      defaults:
+        useFlag: "1"                    # PIK_USE_FLG
+        typeKind: "01"                  # PIK_TYPE_KND: picking type
+        singleGroupDigit: ""            # PIK_SGDG: single-group digit
+        inputFormKind: "01"             # PIK_IPFM_KND: input form kind
+        allocationPartKind: "01"        # PIK_ALPT_KND: allocation part kind
+        inputListKind: "01"             # PIK_IPLT_KND: input list kind
+        displayShippingFlag: "0"        # PIK_DSSP_FLG
+        autoFlag: "0"                   # PIK_AUTO_FLG
+        duplicateDetailFlag: "0"        # PIK_DUDT_FLG
+        availabilitySortKind: "01"      # PIK_AVSC_KND
+        pickingSortKind: "01"           # PIK_PISC_KND
+        packageSortKind: "01"           # PIK_PASC_KND
+        locationSortKind: "01"          # PIK_LOSC_KND
+        locationCodeSortKind: "01"      # PIK_LCSC_KND
+        releaseSortKind: "01"           # PIK_RLSC_KND
+        format: ""                      # PIK_FMT
+
+      # --- Barcode settings (per picking definition) ---
+      barcode:
+        barcodeKind: ""                 # PIK_BARL_KIND
+        startPosition: 0                # PIK_STRP
+        fieldLength: 0                  # PIK_LENF
+        separator: ""                   # PIK_SPRT
+        positionValue: ""               # PIK_POSV
+
+    # ==========================================================
+    # Customer Master Configuration
+    # ==========================================================
+    # Legacy: cm/cmcus/dto/GwhCmcusDTO.java (223 fields)
+    # Table:  GWH_TM_CUST
+    # Keys:   CUST_CPNY_COD, CUST_WHS_COD, CUST_COD
+    # ==========================================================
+    customer:
+      defaults:
+        # --- Core settings ---
+        stockControlKind: ""            # CUST_ST_KND: ""=standard "S"=serial "L"=lot
+        displayKind: "01"               # CUST_DSP_KND
+        crossDockEnabled: "0"           # CUST_XDOC_FLG
+        leadTimeDlFlag: "0"             # CUST_LTDL_FLG
+        historyRetentionDays: 365       # CUST_HRET_DAY
+        cumulativeRetentionDays: 730    # CUST_CRET_DAY
+
+        # --- Product address display kind ---
+        productAddressDisplayKind: "01"   # CUST_PADS_KND
+        cargoIdDisplayKind: "01"          # CUST_CIDS_KND
+        abbreviationPrintKind: "01"       # CUST_ABBP_KND
+        barcodePrintKind: "01"            # CUST_BCBP_KND
+        locationSortKind: "01"            # CUST_LOCS_KND
+
+        # --- Piece/case grouping ---
+        pieceCountGroupFlag: "0"          # CUST_PCGP_FLG
+        resultSortDisplayKind: "01"       # CUST_RSSD_KND
+        productSortDisplayKind: "01"      # CUST_PSDS_KND
+
+        # --- Arrival default locations ---
+        arrivalArea: ""                 # CUST_AV_AREA
+        arrivalRack: ""                 # CUST_AV_RACK
+        arrivalPosition: ""             # CUST_AV_PSTN
+        arrivalLevel: ""                # CUST_AV_LVL
+
+        # --- Allocation back-order location ---
+        allocationBackArea: ""          # CUST_ALBK_AREA
+        allocationBackRack: ""          # CUST_ALBK_RACK
+        allocationBackPosition: ""      # CUST_ALBK_PSTN
+        allocationBackLevel: ""         # CUST_ALBK_LVL
+
+        # --- Kitting processing location ---
+        kittingProcessArea: ""          # CUST_KITP_AREA
+        kittingProcessRack: ""          # CUST_KITP_RACK
+        kittingProcessPosition: ""      # CUST_KITP_PSTN
+        kittingProcessLevel: ""         # CUST_KITP_LVL
+
+        # --- Unreplenish location ---
+        unreplenishKind: "01"           # CUST_UREP_KND
+        unreplenishFlag: "0"            # CUST_UREP_FLG
+        unreplenishArea: ""             # CUST_UREP_AREA
+        unreplenishRack: ""             # CUST_UREP_RACK
+        unreplenishPosition: ""         # CUST_UREP_PSTN
+        unreplenishLevel: ""            # CUST_UREP_LVL
+
+        # --- Quantity permission flags ---
+        arrivalInspectionQtyPermit: "0"   # CUST_AIQP_FLG
+        pickingQtyPermit: "0"             # CUST_PKQP_FLG
+        inventoryQtyPermit: "0"           # CUST_IVQP_FLG
+        receivingInspectionQtyPermit: "0" # CUST_RIQP_FLG
+        shippingInspectionQtyPermit: "0"  # CUST_SIQP_FLG
+        arrivalInvoicePermit: "0"         # CUST_AIVP_FLG
+        arrivalRefPermit: "0"             # CUST_ARFP_FLG
+        arrivalPoPermit: "0"              # CUST_APOP_FLG
+        shippingInvoicePermit: "0"        # CUST_SIVP_FLG
+        shippingRefPermit: "0"            # CUST_SRFP_FLG
+        shippingPoPermit: "0"             # CUST_SPOP_FLG
+        serialRequestQtyPermit: "0"       # CUST_SRQP_FLG
+        loadQuantityPermit: "0"           # CUST_LDQP_FLG
+        locationChangeQtyPermit: "0"      # CUST_LCQP_FLG
+
+        # --- Display template kinds ---
+        displayArrivalTemplate: "01"      # CUST_DAVT_KND
+        displayUnplanInTemplate: "01"     # CUST_DUIT_KND
+        displayShippingTemplate: "01"     # CUST_DSPT_KND
+        displayUnplanOutTemplate: "01"    # CUST_DUOT_KND
+        displayStockAdjustTemplate: "01"  # CUST_DSJT_KND
+        displayRelocationTemplate: "01"   # CUST_DRLT_KND
+        displayPartitionTemplate: "01"    # CUST_DPTT_KND
+        displayKittingAsmTemplate: "01"   # CUST_DKAT_KND
+        displayKittingSplitTemplate: "01" # CUST_DKST_KND
+        displayBondArrTemplate: "01"      # CUST_DBAT_KND
+        displayBondShipTemplate: "01"     # CUST_DBST_KND
+
+        # --- Shipper defaults ---
+        shipperCode: ""                 # CUST_SHPR_COD
+        shipperCountryCode: ""          # CUST_SHPR_CTRY_COD
+        shipperCityCode: ""             # CUST_SHPR_CITY_COD
+        shipperStateCode: ""            # CUST_SHPR_STAT_COD
+
+        # --- Master operation flags ---
+        allocateGroupingEnabled: "0"    # CUST_ALGP_FLG
+        consolidatePartialAlloc: "0"    # CUST_COPA_FLG
+        allocatePriorityKind: "01"      # CUST_ALPR_KND
+        allocatePriorityPikKind: "01"   # CUST_ALPR_PIK_KND
+        getKind: "01"                   # CUST_GET_KND
+        subInventoryEnabled: "0"        # CUST_SBIV_FLG
+        operationDisplayFlag: "0"       # CUST_OPD_FLG
+        allocationPermitFlag: "0"       # CUST_ALP_FLG
+        swapFlag: "0"                   # CUST_SWP_FLG
+        batchGroupFlag: "0"             # CUST_BTG_FLG
+        autoRegisterProductFlag: "0"    # CUST_PAR_FLG
+        pieceManagementEnabled: "0"     # CUST_PCSM_FLG
+        splitManagementEnabled: "0"     # CUST_SPLM_FLG
+        deliveryManagementEnabled: "0"  # CUST_DLVM_FLG
+        cargoConfirmArrival: "0"        # CUST_CCAV_FLG
+        cargoConfirmShipping: "0"       # CUST_CCSP_FLG
+
+        # --- Delivery settings ---
+        deliveryInsuranceKind: "01"     # CUST_DVINS_KND
+        deliveryInsuranceAmount: 0      # CUST_DVINS_AMT
+        hotmanCode: ""                  # CUST_HTMN_COD
+        deliveryGenerateFlag: "0"       # CUST_DVGEN_FLG
+
+        # --- KPI settings ---
+        kpiEnabled: "0"                 # CUST_KPI_FLG
+        kpiJudgmentKind: "01"           # CUST_KPIJ_KND
+
+        # --- Display barcode ---
+        displayBarcodeKind: "01"        # CUST_DBAR_KND
+
+        # --- Barcode scanning settings ---
+        barcodeKind: ""                 # CUST_BARL_KIND
+        barcodeStartPosition: 0         # CUST_STRP
+        barcodeFieldLength: 0           # CUST_LENF
+        barcodeSeparator: ""            # CUST_SPRT
+        barcodePositionValue: ""        # CUST_POSV
+
+        # --- Sorting screen keys ---
+        screenSortArrival: "01"         # CUST_SCAI_KND
+        screenSortPicking: "01"         # CUST_SCPK_KND
+        screenSortShipping: "01"        # CUST_SCSI_KND
+        screenSortStock: "01"           # CUST_SCST_KND
+        screenSortLocation: "01"        # CUST_SCLC_KND
+        screenSortSerial: "01"          # CUST_SCSR_KND
+
+        # --- Stock ledger report keys ---
+        stockLedgerKey1: ""             # CUST_STLR_KEY1
+        stockLedgerKey2: ""             # CUST_STLR_KEY2
+        stockLedgerKey3: ""             # CUST_STLR_KEY3
+        stockLedgerKey4: ""             # CUST_STLR_KEY4
+        stockLedgerKey5: ""             # CUST_STLR_KEY5
+        stockLedgerKey6: ""             # CUST_STLR_KEY6
+        stockLedgerKey7: ""             # CUST_STLR_KEY7
+        stockLedgerKey8: ""             # CUST_STLR_KEY8
+        allocStockLedgerKey1: ""        # CUST_ASLR_KEY1
+        allocStockLedgerKey2: ""        # CUST_ASLR_KEY2
+        allocStockLedgerKey3: ""        # CUST_ASLR_KEY3
+        allocStockLedgerKey4: ""        # CUST_ASLR_KEY4
+        allocStockLedgerKey5: ""        # CUST_ASLR_KEY5
+        allocStockLedgerKey6: ""        # CUST_ASLR_KEY6
+        allocStockLedgerKey7: ""        # CUST_ASLR_KEY7
+        allocStockLedgerKey8: ""        # CUST_ASLR_KEY8
+
+        # --- Additional operation flags ---
+        palletControlKind: "01"         # CUST_PLT_CTL_KND
+        rotationPrintKind: "01"         # CUST_ROTP_KND
+        pieceCertificateFlag: "0"       # CUST_PCER_FLG
+        yymmlockFlag: "0"              # CUST_YMLK_FLG
+        autoCarryFlag: "0"             # CUST_ACAR_FLG
+        cargoIdOutputFlag: "0"         # CUST_CIDO_FLG
+        subInventoryOverrideFlag: "0"  # CUST_SBIV_OVR_FLG
+        serialLookupFlag: "0"          # CUST_SRLU_FLG
+        palletAutoCarryFlag: "0"       # CUST_PLT_ACAR_FLG
+        appendPartialConfirmFlag: "0"  # CUST_APPC_FLG
+        damageReportFlag: "0"          # CUST_DAR_FLG
+        arrivalItemInputKind: "01"     # CUST_ATAI_KND
+        arrivalStockInputKind: "01"    # CUST_ATSI_KND
+
+      ui:
+        showShipperSection: true
+        showWeekendSettings: true
+        showBillingSection: true
+        showCustomItemsSection: true
+        showCustomFlagsSection: true
+        showDeliverySection: true
+        showBarcodeScanSection: true
+        showLocationDefaultsSection: true
+        showSortingKeysSection: true
+        showStockLedgerKeysSection: true
+        # Custom item text labels (CIT1-CIT15)
+        customItemLabels:
+          cit1: "Custom Item 1"
+          cit2: "Custom Item 2"
+          cit3: "Custom Item 3"
+          cit4: "Custom Item 4"
+          cit5: "Custom Item 5"
+          cit6: "Custom Item 6"
+          cit7: "Custom Item 7"
+          cit8: "Custom Item 8"
+          cit9: "Custom Item 9"
+          cit10: "Custom Item 10"
+          cit11: "Custom Item 11"
+          cit12: "Custom Item 12"
+          cit13: "Custom Item 13"
+          cit14: "Custom Item 14"
+          cit15: "Custom Item 15"
+        # Custom flag labels (CFG1-CFG15)
+        customFlagLabels:
+          cfg1: "Custom Flag 1"
+          cfg2: "Custom Flag 2"
+          cfg3: "Custom Flag 3"
+          cfg4: "Custom Flag 4"
+          cfg5: "Custom Flag 5"
+          cfg6: "Custom Flag 6"
+          cfg7: "Custom Flag 7"
+          cfg8: "Custom Flag 8"
+          cfg9: "Custom Flag 9"
+          cfg10: "Custom Flag 10"
+          cfg11: "Custom Flag 11"
+          cfg12: "Custom Flag 12"
+          cfg13: "Custom Flag 13"
+          cfg14: "Custom Flag 14"
+          cfg15: "Custom Flag 15"
+        # Custom numeric labels (CNI1-CNI15)
+        customNumericLabels:
+          cni1: "Custom Number 1"
+          cni2: "Custom Number 2"
+          cni3: "Custom Number 3"
+          cni4: "Custom Number 4"
+          cni5: "Custom Number 5"
+          cni6: "Custom Number 6"
+          cni7: "Custom Number 7"
+          cni8: "Custom Number 8"
+          cni9: "Custom Number 9"
+          cni10: "Custom Number 10"
+          cni11: "Custom Number 11"
+          cni12: "Custom Number 12"
+          cni13: "Custom Number 13"
+          cni14: "Custom Number 14"
+          cni15: "Custom Number 15"
+
+    # ==========================================================
+    # Product Master Configuration
+    # ==========================================================
+    # Legacy: cm/cmprd/dto/GwhCmprdDTO.java (201 fields)
+    # Table:  GWH_TM_PROD
+    # Keys:   PROD_CPNY_COD, PROD_WHS_COD, PROD_CUST_COD, PROD_COD
+    # ==========================================================
+    product:
+      defaults:
+        # --- Core settings ---
+        piecesPerCase: 1                # PROD_PPC_NUM
+        allocationMethodKind: "F"       # PROD_ALCT_KBN: F=FIFO L=LIFO E=FEFO
+        stockControlFlag: "0"           # PROD_STCK_FLG
+        storageKind: "01"               # PROD_STRG_KND
+        storageFrequency: ""            # PROD_SPFQ
+        autoSerialFlag: "0"             # PROD_ACSR_FLG
+        stockWeightQty: 0               # PROD_STWG_QTY
+        stockWeightPcQty: 0             # PROD_STWG_PC_QTY
+
+        # --- Product hierarchy / classification ---
+        hierarchy1: ""                  # PROD_HRC1
+        hierarchy2: ""                  # PROD_HRC2
+        hierarchy3: ""                  # PROD_HRC3
+
+        # --- Dimensions & weight defaults (CS=case, BL=ball, PC=piece) ---
+        caseWeight: 0                   # PROD_CS_WGT
+        caseVolume: 0                   # PROD_CS_M3
+        caseLength: 0                   # PROD_CS_LEN
+        caseWidth: 0                    # PROD_CS_WID
+        caseHeight: 0                   # PROD_CS_HIG
+        ballWeight: 0                   # PROD_BL_WGT
+        ballVolume: 0                   # PROD_BL_M3
+        ballLength: 0                   # PROD_BL_LEN
+        ballWidth: 0                    # PROD_BL_WID
+        ballHeight: 0                   # PROD_BL_HIG
+        pieceWeight: 0                  # PROD_PC_WGT
+        pieceVolume: 0                  # PROD_PC_M3
+        pieceLength: 0                  # PROD_PC_LEN
+        pieceWidth: 0                   # PROD_PC_WID
+        pieceHeight: 0                  # PROD_PC_HIG
+        grossWeight: 0                  # PROD_GRS_WGT
+        netWeight: 0                    # PROD_NET_WGT
+
+        # --- UOM defaults ---
+        uomPiece: "PCS"                 # PROD_PCUM_PCS
+        uomBall: "BL"                   # PROD_PCUM_BL
+        uomCase: "CS"                   # PROD_PCUM_CS
+        uomHeight: "CM"                 # PROD_PCUM_HIG
+        uomWeight: "KG"                 # PROD_PCUM_WGT
+        uomVolume: "M3"                 # PROD_PCUM_M3
+
+        # --- Replenishment location defaults ---
+        replenishCaseArea: ""           # PROD_RCAR_COD
+        replenishCaseRack: ""           # PROD_RCRA_COD
+        replenishCasePosition: ""       # PROD_RCPS_COD
+        replenishCaseLevel: ""          # PROD_RCLV_COD
+        replenishCaseFixed: "0"         # PROD_RCFX_FLG
+        replenishPieceArea: ""          # PROD_RPAR_COD
+        replenishPieceRack: ""          # PROD_RPRA_COD
+        replenishPiecePosition: ""      # PROD_RPPS_COD
+        replenishPieceLevel: ""         # PROD_RPLV_COD
+        replenishPieceFixed: "0"        # PROD_RPFX_FLG
+        replenishMaxQty: 0              # PROD_RMXP_QTY
+        replenishSeedQty: 0             # PROD_RSDP_QTY
+
+        # --- Pricing ---
+        depositAmount: 0                # PROD_DPST_AMT
+        depositCurrency: ""             # PROD_DPCR_UNT
+        purchaseAmount: 0               # PROD_PCHS_AMT
+        purchaseCurrency: ""            # PROD_PCCR_UNT
+        salesAmount: 0                  # PROD_SLS_AMT
+        salesCurrency: ""               # PROD_SLCR_UNT
+        priceCurrency: ""               # PROD_CRCY_UOM
+        roundingDigit: 0                # PROD_RD_DGT
+        roundingKind: "01"              # PROD_RD_KND
+
+        # --- Bonding / customs ---
+        bondControlKind: "00"           # PROD_BOND_KND
+        hsCode: ""                      # PROD_HS_COD
+        customerStatus: ""              # PROD_CUST_STS
+
+        # --- Expiry / due date settings ---
+        expiryKind: "01"                # PROD_EXPR_KND
+        expiryDays: 0                   # PROD_EXPR_DAY
+        shippingDueDays: 0              # PROD_SPDU_DAY
+        shippingDueKind: "01"           # PROD_SPDU_KND
+        stockDueDays: 0                 # PROD_STDU_DAY
+        stockDueKind: "01"              # PROD_STDU_KND
+        arrivalDueDays: 0               # PROD_AVDU_DAY
+        arrivalDueKind: "01"            # PROD_AVDU_KND
+        shippingRefDays: 0              # PROD_SPRF_DAY
+        shippingRetDays: 0              # PROD_SPRT_DAY
+        bestBeforePrintKind: "01"       # PROD_BBPR_KND
+        bestBeforePrintDays: 0          # PROD_BBPR_DAY
+
+        # --- Allocation / kitting ---
+        kittingProduct: "0"             # PROD_KIT_FLG
+        kittingSourceFlag: "0"          # PROD_KITS_FLG
+        psaaKind: "00"                  # PROD_PSSA_KND
+        psaaDays: 0                     # PROD_PSSA_DAY
+        crossDockKind: "00"             # PROD_XDOC_KND
+        chargeClassGroup: ""            # PROD_CCGP
+        serialLotGetFlag: "0"           # PROD_SLGT_FLG
+        serialAllocFlag: "0"            # PROD_SRL_ALLO_FLG
+        caseMarkType: ""                # PROD_CASE_MARK_TYPE
+        receiptBatchNum: ""             # PROD_RCV_BTCH_NUM
+        productPerBallNum: 0            # PROD_PPB_NUM
+        productMaxQty: 0                # PROD_PRMX_QTY
+        productMinQty: 0                # PROD_PRMN_QTY
+        frequencyType: "01"             # PROD_FRTY_KND
+        arrivalItemKind: "01"           # PROD_AITM_KND
+        arrivalEndBagKind: "01"         # PROD_AEBG_KND
+        autoRegisterFromInterface: "0"
+
+        # --- Warehouse charge fee calculation ---
+        calcArrivalFeeUnit: ""          # PROD_CALC_AVF_UNT
+        calcArrivalFeeRound: 0          # PROD_CALC_AVF_RD
+        priceArrivalFee: 0              # PROD_PRC_AV_FEE
+        specialPriceArrivalFee: 0       # PROD_SPRC_AV_FEE
+        calcShippingFeeUnit: ""         # PROD_CALC_SPF_UNT
+        calcShippingFeeRound: 0         # PROD_CALC_SPF_RD
+        priceShippingFee: 0             # PROD_PRC_SP_FEE
+        specialPriceShippingFee: 0      # PROD_SPRC_SP_FEE
+        calcStorageFeeUnit: ""          # PROD_CALC_STF_UNT
+        calcStorageFeeRound: 0          # PROD_CALC_STF_RD
+        priceStorageFee: 0              # PROD_PRC_ST_FEE
+        specialPriceStorageFee: 0       # PROD_SPRC_ST_FEE
+        calcKittingFeeUnit: ""          # PROD_CALC_KTF_UNT
+        calcKittingFeeRound: 0          # PROD_CALC_KTF_RD
+        priceKittingFee: 0              # PROD_PRC_KT_FEE
+        specialPriceKittingFee: 0       # PROD_SPRC_KT_FEE
+        calcSubFeeUnit: ""              # PROD_CALC_SBF_UNT
+        calcSubFeeRound: 0              # PROD_CALC_SBF_RD
+        priceSubFee: 0                  # PROD_PRC_SB_FEE
+        specialPriceSubFee: 0           # PROD_SPRC_SB_FEE
+        calcWarehouseFeeUnit: ""        # PROD_CALC_AWF_UNT
+        calcWarehouseFeeRound: 0        # PROD_CALC_AWF_RD
+        priceWarehouseFee: 0            # PROD_PRC_AW_FEE
+        specialPriceWarehouseFee: 0     # PROD_SPRC_AW_FEE
+
+        # --- Screen sort kinds (per product) ---
+        screenSortSerial: "01"          # PROD_SCSR_KND
+        screenSortArrival: "01"         # PROD_SCAI_KND
+        screenSortPicking: "01"         # PROD_SCPK_KND
+        screenSortShipping: "01"        # PROD_SCSI_KND
+        screenSortStock: "01"           # PROD_SCST_KND
+        screenSortLocation: "01"        # PROD_SCLC_KND
+        customSortSerial: "01"          # PROD_CUSR_KND
+        customSortArrival: "01"         # PROD_CUAI_KND
+        customSortPicking: "01"         # PROD_CUPK_KND
+        customSortShipping: "01"        # PROD_CUSI_KND
+        customSortStock: "01"           # PROD_CUST_KND
+        customSortLocation: "01"        # PROD_CULC_KND
+
+      ui:
+        showPricingSection: true
+        showDimensionsSection: true
+        showExpirySection: true
+        showBondingSection: false
+        showReplenishSection: true
+        showFeeCalcSection: false
+        showSortingKeysSection: true
+        showCustomItemsSection: true
+        showCustomFlagsSection: true
+        # Custom item labels (CLI1-CLI15)
+        customItemLabels:
+          cli1: "Custom Item 1"
+          cli2: "Custom Item 2"
+          cli3: "Custom Item 3"
+          cli4: "Custom Item 4"
+          cli5: "Custom Item 5"
+          cli6: "Custom Item 6"
+          cli7: "Custom Item 7"
+          cli8: "Custom Item 8"
+          cli9: "Custom Item 9"
+          cli10: "Custom Item 10"
+          cli11: "Custom Item 11"
+          cli12: "Custom Item 12"
+          cli13: "Custom Item 13"
+          cli14: "Custom Item 14"
+          cli15: "Custom Item 15"
+        # Custom flag labels (CFG1-CFG15)
+        customFlagLabels:
+          cfg1: "Custom Flag 1"
+          cfg2: "Custom Flag 2"
+          cfg3: "Custom Flag 3"
+          cfg4: "Custom Flag 4"
+          cfg5: "Custom Flag 5"
+          cfg6: "Custom Flag 6"
+          cfg7: "Custom Flag 7"
+          cfg8: "Custom Flag 8"
+          cfg9: "Custom Flag 9"
+          cfg10: "Custom Flag 10"
+          cfg11: "Custom Flag 11"
+          cfg12: "Custom Flag 12"
+          cfg13: "Custom Flag 13"
+          cfg14: "Custom Flag 14"
+          cfg15: "Custom Flag 15"
+        # Custom numeric labels (CNI1-CNI15)
+        customNumericLabels:
+          cni1: "Custom Number 1"
+          cni2: "Custom Number 2"
+          cni3: "Custom Number 3"
+          cni4: "Custom Number 4"
+          cni5: "Custom Number 5"
+          cni6: "Custom Number 6"
+          cni7: "Custom Number 7"
+          cni8: "Custom Number 8"
+          cni9: "Custom Number 9"
+          cni10: "Custom Number 10"
+          cni11: "Custom Number 11"
+          cni12: "Custom Number 12"
+          cni13: "Custom Number 13"
+          cni14: "Custom Number 14"
+          cni15: "Custom Number 15"
+
+    # ==========================================================
+    # Transaction Kind Configuration
+    # ==========================================================
+    # Legacy: cm/cmtrn/dto/GwhCmtrnDTO.java (81 fields)
+    # Table:  GWH_TM_TRN
+    # Keys:   TRN_CPNY_COD, TRN_WHS_COD, TRN_CUST_COD, TRN_KND
+    # ==========================================================
+    transaction:
+      defaults:
+        # --- Charge calculation flags ---
+        arrivalChargeCalc: "0"          # TRN_AVCC_FLG
+        shippingChargeCalc: "0"         # TRN_SPCC_FLG
+        storageChargeCalc: "0"          # TRN_STCC_FLG
+        disposalChargeCalc: "0"         # TRN_DSCC_FLG
+
+        # --- Operation permission flags ---
+        reasonCodeRequired: "0"         # TRN_RSNR_FLG
+        pickKeyDiscrepancyPermit: "0"   # TRN_PKDP_FLG
+        surplusPermitAtArrival: "0"     # TRN_SPPA_FLG
+        shortagePermitAtArrival: "0"    # TRN_SHPA_FLG
+
+        # --- Module usage flags ---
+        arrivalUsage: "0"               # TRN_AVUS_FLG
+        unplanInUsage: "0"              # TRN_UIUS_FLG
+        shippingUsage: "0"              # TRN_SPUS_FLG
+        unplanOutUsage: "0"             # TRN_UOUS_FLG
+        stockAdjustUsage: "0"           # TRN_STAJ_FLG
+        relocationUsage: "0"            # TRN_RLUS_FLG
+        partitionUsage: "0"             # TRN_PTUS_FLG
+        kittingAssemblyUsage: "0"       # TRN_KAUS_FLG
+        kittingSplitUsage: "0"          # TRN_KSUS_FLG
+        bondArrivalUsage: "0"           # TRN_BAUS_FLG
+        bondShippingUsage: "0"          # TRN_BSUS_FLG
+
+        # --- KPI / Bonding ---
+        kpiShippingFrequencyTarget: "0" # TRN_KPIS_FLG
+        bondControlFlag: "0"            # TRN_BNDC_FLG
+        partialDataAutoCreate: "0"      # TRN_PDAC_FLG
+        displayKind: ""                 # TRN_KND_DSP
+
+      # Standard transaction kind codes
+      standardKinds:
+        arrival: "001"
+        shipping: "011"
+        stockAdjust: "021"
+        relocation: "031"
+        unplanIn: "041"
+        unplanOut: "051"
+        kittingAssembly: "061"
+        kittingSplit: "071"
+        bondArrival: "081"
+        bondShipping: "091"
+        partition: "101"
+
+      ui:
+        showChargeSection: true
+        showModuleUsageSection: true
+        showCustomItemsSection: true
+        showCustomFlagsSection: true
+        # Custom item labels (CIT1-CIT15)
+        customItemLabels:
+          cit1: "Custom Item 1"
+          cit2: "Custom Item 2"
+          cit3: "Custom Item 3"
+          cit4: "Custom Item 4"
+          cit5: "Custom Item 5"
+          cit6: "Custom Item 6"
+          cit7: "Custom Item 7"
+          cit8: "Custom Item 8"
+          cit9: "Custom Item 9"
+          cit10: "Custom Item 10"
+          cit11: "Custom Item 11"
+          cit12: "Custom Item 12"
+          cit13: "Custom Item 13"
+          cit14: "Custom Item 14"
+          cit15: "Custom Item 15"
+        # Custom flag labels (CFG1-CFG15)
+        customFlagLabels:
+          cfg1: "Custom Flag 1"
+          cfg2: "Custom Flag 2"
+          cfg3: "Custom Flag 3"
+          cfg4: "Custom Flag 4"
+          cfg5: "Custom Flag 5"
+          cfg6: "Custom Flag 6"
+          cfg7: "Custom Flag 7"
+          cfg8: "Custom Flag 8"
+          cfg9: "Custom Flag 9"
+          cfg10: "Custom Flag 10"
+          cfg11: "Custom Flag 11"
+          cfg12: "Custom Flag 12"
+          cfg13: "Custom Flag 13"
+          cfg14: "Custom Flag 14"
+          cfg15: "Custom Flag 15"
+        customNumericLabels:
+          cni1: "Custom Number 1"
+          cni2: "Custom Number 2"
+          cni3: "Custom Number 3"
+          cni4: "Custom Number 4"
+          cni5: "Custom Number 5"
+          cni6: "Custom Number 6"
+          cni7: "Custom Number 7"
+          cni8: "Custom Number 8"
+          cni9: "Custom Number 9"
+          cni10: "Custom Number 10"
+          cni11: "Custom Number 11"
+          cni12: "Custom Number 12"
+          cni13: "Custom Number 13"
+          cni14: "Custom Number 14"
+          cni15: "Custom Number 15"
+
+    # ==========================================================
+    # Warehouse Master Configuration
+    # ==========================================================
+    # Legacy: cm/cmwhs/dto/GwhCmwhsDTO.java (23 fields)
+    # Table:  GWH_TM_WHS
+    # Keys:   WHS_CPNY_COD, WHS_COD
+    # ==========================================================
+    warehouse:
+      defaults:
+        countryCode: ""                 # WHS_CTRY_COD
+        cityCode: ""                    # WHS_CITY_COD
+        stateCode: ""                   # WHS_STAT_COD
+        storeCode: ""                   # WHS_STR_COD
+        abbreviationType: ""            # WHS_ABYT
+        reportBatchPattern1: ""         # WHS_RBP1
+        reportBatchPattern2: ""         # WHS_RBP2
+        reportBatchPattern3: ""         # WHS_RBP3
+        reportBatchPattern4: ""         # WHS_RBP4
+
+      # Default location structure for warehouse
+      locationStructure:
+        area: ""
+        rack: ""
+        position: ""
+        level: ""
+
+    # ==========================================================
+    # Location Master Configuration
+    # ==========================================================
+    # Legacy: cm/cmloc/dto/GwhCmlocDTO.java (68 fields)
+    # Table:  GWH_TM_LOC
+    # Keys:   LOC_CPNY_COD, LOC_WHS_COD, LCSB_CUST_COD, LOC_COD
+    # ==========================================================
+    location:
+      defaults:
+        zoneCode: ""                    # LOC_ZONE_COD
+        composeKind: "01"               # LOC_CNPS_KND
+        noAllocateFlag: "0"             # LOC_NOAL_FLG
+        noReplenishFlag: "0"            # LOC_NORP_FLG
+        noProductFlag: "0"              # LOC_NOPD_FLG
+        noPickFlag: "0"                 # LOC_NOPK_FLG
+        allocatePriority: 0             # LOC_ALPR
+        pickLineNumber: 0               # LOC_PKLN
+        locationLength: 0               # LOC_LEN
+        locationWidth: 0                # LOC_WID
+        locationHeight: 0               # LOC_HIG
+        temperatureControl: ""          # LOC_TEMP_CTR
+        assignedProductCode: ""         # LOC_APRD_COD
+        subInventoryLocation: ""        # LCSB_LOC_SBIV
+      ui:
+        showDimensionsSection: true
+        showCustomItemsSection: true
+        showCustomFlagsSection: true
+        customItemLabels:
+          cit1: "Custom Item 1"
+          cit2: "Custom Item 2"
+          cit3: "Custom Item 3"
+          cit4: "Custom Item 4"
+          cit5: "Custom Item 5"
+          cit6: "Custom Item 6"
+          cit7: "Custom Item 7"
+          cit8: "Custom Item 8"
+          cit9: "Custom Item 9"
+          cit10: "Custom Item 10"
+          cit11: "Custom Item 11"
+          cit12: "Custom Item 12"
+          cit13: "Custom Item 13"
+          cit14: "Custom Item 14"
+          cit15: "Custom Item 15"
+        customFlagLabels:
+          cfg1: "Custom Flag 1"
+          cfg2: "Custom Flag 2"
+          cfg3: "Custom Flag 3"
+          cfg4: "Custom Flag 4"
+          cfg5: "Custom Flag 5"
+          cfg6: "Custom Flag 6"
+          cfg7: "Custom Flag 7"
+          cfg8: "Custom Flag 8"
+          cfg9: "Custom Flag 9"
+          cfg10: "Custom Flag 10"
+          cfg11: "Custom Flag 11"
+          cfg12: "Custom Flag 12"
+          cfg13: "Custom Flag 13"
+          cfg14: "Custom Flag 14"
+          cfg15: "Custom Flag 15"
+        customNumericLabels:
+          cni1: "Custom Number 1"
+          cni2: "Custom Number 2"
+          cni3: "Custom Number 3"
+          cni4: "Custom Number 4"
+          cni5: "Custom Number 5"
+          cni6: "Custom Number 6"
+          cni7: "Custom Number 7"
+          cni8: "Custom Number 8"
+          cni9: "Custom Number 9"
+          cni10: "Custom Number 10"
+          cni11: "Custom Number 11"
+          cni12: "Custom Number 12"
+          cni13: "Custom Number 13"
+          cni14: "Custom Number 14"
+          cni15: "Custom Number 15"
+
+    # ==========================================================
+    # Code Master Configuration
+    # ==========================================================
+    # Legacy: cm/cmcod/dto/GwhCmcodDTO.java (35 fields)
+    # Table:  GWH_TM_CODE
+    # Keys:   CODE_CPNY_COD, CODE_WHS_COD, CODE_CUST_COD, CODE_KND, CODE_COD
+    # ==========================================================
+    code:
+      defaults:
+        standardFlag: "0"               # CODE_STD_FLG
+      # Standard code kinds used across the system
+      standardKinds:
+        transportType: "TRSP"           # Transport type codes
+        statusKind: "STS"               # Status codes
+        reasonKind: "RSN"               # Reason codes
+        displayKind: "DSP"              # Display kind codes
+        sortKind: "SORT"                # Sort kind codes
+        allocationKind: "ALOC"          # Allocation kind codes
+        barcodeKind: "BARL"             # Barcode kind codes
+        expiryKind: "EXPR"              # Expiry kind codes
+        bondKind: "BOND"                # Bond kind codes
+        feeCalcUnit: "FCAL"             # Fee calculation unit codes
+        roundingKind: "RNDG"            # Rounding kind codes
+        uomKind: "UOM"                  # Unit of measure codes
+
+    # ==========================================================
+    # Numbering Master Configuration
+    # ==========================================================
+    # Legacy: cm/cmnum/dto/GwhCmnumDTO.java (29 fields)
+    # Table:  GWH_TM_NUM
+    # Keys:   NUM_CPNY_COD, NUM_WHS_COD, NUM_CUST_COD, NUM_COD
+    # ==========================================================
+    numbering:
+      defaults:
+        numberType: "SEQ"               # NUM_TYP: SEQ=sequential, YMD=date-prefix
+        noLoopFlag: "0"                 # NUM_NLOP_FLG: 0=loop, 1=no loop (error at max)
+      # Standard numbering codes
+      standardCodes:
+        arrivalNumber: "AV_NUM"
+        shippingNumber: "SP_NUM"
+        stockAdjustNumber: "STK_NUM"
+        relocationNumber: "TR_NUM"
+        deliveryNumber: "DV_NUM"
+        palletNumber: "PLT_NUM"
+        loadNumber: "LD_NUM"
+        serialNumber: "SRL_NUM"
+
+    # ==========================================================
+    # Reason Master Configuration
+    # ==========================================================
+    # Legacy: cm/cmrsn/dto/GwhCmrsnDTO.java (6 fields)
+    # Table:  GWH_TM_RSN
+    # Keys:   RSN_CPNY_COD, RSN_WHS_COD, RSN_CUST_COD, RSN_COD
+    # ==========================================================
+    reason:
+      standardCodes:
+        damaged: "DMG"
+        expired: "EXP"
+        qualityIssue: "QA"
+        customerReturn: "RTN"
+        adjustment: "ADJ"
+        other: "OTH"
+
+    # ==========================================================
+    # Status Master Configuration
+    # ==========================================================
+    # Legacy: cm/cmsts/dto/GwhCmstsDTO.java (9 fields)
+    # Table:  GWH_TM_STS
+    # Keys:   STS_CPNY_COD, STS_WHS_COD, STS_CUST_COD, STS_BSNS_COD, STS_COD
+    # ==========================================================
+    status:
+      defaults:
+        workStatusKind: "01"            # STS_WKST_KND
+        confirmTimingFlag: "0"          # STS_CFM_TMG_FLG
+      # Standard business codes for status grouping
+      businessCodes:
+        arrival: "AV"
+        shipping: "SP"
+        stock: "ST"
+        picking: "PK"
+        loading: "LD"
+        delivery: "DV"
+        kitting: "KT"
+        bond: "BD"
+      # Standard status progression per business
+      arrivalStatuses:
+        scheduled: "10"
+        arrived: "20"
+        inspecting: "30"
+        inspected: "40"
+        putaway: "50"
+        confirmed: "90"
+      shippingStatuses:
+        ordered: "10"
+        allocated: "20"
+        picking: "30"
+        picked: "40"
+        inspected: "50"
+        packed: "60"
+        loaded: "70"
+        shipped: "80"
+        confirmed: "90"
+      stockStatuses:
+        normal: "10"
+        hold: "20"
+        damaged: "30"
+        expired: "40"
+        reserved: "50"
+
+    # ==========================================================
+    # Environment Configuration
+    # ==========================================================
+    # Legacy: cm/cmenv/dto/GwhCmenvDTO.java (4 fields)
+    # Table:  GWH_TM_ENV
+    # Keys:   ENV_PRM_COD
+    # ==========================================================
+    environment:
+      # System-wide environment parameters
+      parameters:
+        timezone: "Asia/Tokyo"          # ENV_PRM_COD=TIMEZONE
+        dateFormat: "yyyy/MM/dd"        # ENV_PRM_COD=DATE_FORMAT
+        numberFormat: "#,##0.###"       # ENV_PRM_COD=NUMBER_FORMAT
+        currencyDefault: "JPY"          # ENV_PRM_COD=CURRENCY
+        languageDefault: "ja"           # ENV_PRM_COD=LANGUAGE
+        sessionTimeoutMinutes: 30       # ENV_PRM_COD=SESSION_TIMEOUT
+        maxSearchResults: 1000          # ENV_PRM_COD=MAX_SEARCH
+        batchJobMaxConcurrent: 5        # ENV_PRM_COD=BATCH_MAX
+        ediFileEncoding: "UTF-8"        # ENV_PRM_COD=EDI_ENCODING
+        reportOutputPath: "/tmp/gwh/reports" # ENV_PRM_COD=REPORT_PATH
+
+    # ==========================================================
+    # Organization Master Configuration
+    # ==========================================================
+    # Legacy: cm/cmorg/dto/GwhCmorgDTO.java (16 fields)
+    # Table:  GWH_TM_ORG (country/company reference)
+    # Keys:   COMCNTRY_COD
+    # ==========================================================
+    organization:
+      defaults:
+        countryCode: "JP"               # COMCNTRY_COD
+        costCenterJpn: ""               # COMCOST_JPN_COD
+        costCenterUsa: ""               # COMCOST_USA_COD
+        costCenterEu: ""                # COMCOST_EU_COD
+
+    # ==========================================================
+    # Serial Master Configuration
+    # ==========================================================
+    # Legacy: cm/cmsrl/dto/GwhCmsrlDTO.java (11 fields)
+    # Table:  GWH_TM_SRL
+    # Keys:   SRL_PROD_COD, SRL_ORGN_COD, SRL_SRL_NUM
+    # ==========================================================
+    serial:
+      defaults:
+        assignmentKind: "01"            # SRL_AS_KND: 01=arrival, 02=shipping
+      tracking:
+        enabled: false
+        requireUniquePerProduct: true
+        allowReuse: false

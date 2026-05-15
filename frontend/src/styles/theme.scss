@@ -1,0 +1,430 @@
+// ============================================================
+// GWH Modern WMS - Custom Theme
+// Override PrimeNG Aura theme with brand colors
+// ============================================================
+
+// Brand Palette
+$primary:   #1A005D;
+$accent:    #8EC400;
+$secondary: #5BC2E7;
+$warning:   #FF9E1B;
+$danger:    #FF585D;
+
+// Surface colors
+$surface-0:   #ffffff;
+$surface-50:  #f8f9fc;
+$surface-100: #f1f3f9;
+$surface-200: #e4e7f0;
+$surface-300: #d1d5e0;
+$surface-400: #a1a7b8;
+$surface-500: #6b7280;
+$surface-600: #4b5563;
+$surface-700: #374151;
+$surface-800: #1f2937;
+$surface-900: #111827;
+
+// Typography
+$font-family: 'Inter', 'Noto Sans', 'Noto Sans JP', 'Noto Sans Thai', system-ui, -apple-system, sans-serif;
+$font-size: 14px;
+$border-radius: 8px;
+
+// ============================================================
+// PrimeNG Theme Overrides
+// ============================================================
+
+:root {
+  // Brand colors
+  --color-primary: #{$primary};
+  --color-accent: #{$accent};
+  --color-secondary: #{$secondary};
+  --color-warning: #{$warning};
+  --color-danger: #{$danger};
+
+  // PrimeNG overrides
+  --primary-color: #{$primary};
+  --primary-color-text: #ffffff;
+  --highlight-bg: rgba(26, 0, 93, 0.08);
+  --highlight-text-color: #{$primary};
+  --focus-ring: 0 0 0 2px #ffffff, 0 0 0 4px rgba(26, 0, 93, 0.3);
+
+  // Surface
+  --surface-ground: #{$surface-50};
+  --surface-section: #{$surface-0};
+  --surface-card: #{$surface-0};
+  --surface-overlay: #{$surface-0};
+  --surface-border: #{$surface-200};
+  --surface-hover: #{$surface-100};
+
+  // Text
+  --text-color: #{$surface-800};
+  --text-color-secondary: #{$surface-500};
+  --font-family: #{$font-family};
+  --surface-0: #{$surface-0};
+
+  // Custom tokens
+  --sidebar-width: 260px;
+  --sidebar-collapsed-width: 72px;
+  --topbar-height: 64px;
+  --content-padding: 24px;
+  --card-radius: #{$border-radius};
+  --transition-duration: 0.2s;
+}
+
+// ============================================================
+// PrimeNG Component Overrides
+// ============================================================
+
+// Buttons
+.p-button {
+  border-radius: $border-radius;
+  font-weight: 600;
+  transition: all 0.2s ease;
+  color: #ffffff;
+
+  &:enabled:hover {
+    color: #ffffff;
+  }
+
+  &.p-button-success {
+    background: $accent;
+    border-color: $accent;
+    color: #ffffff;
+    &:hover {
+      background: darken($accent, 8%);
+      border-color: darken($accent, 8%);
+    }
+  }
+
+  &.p-button-info {
+    background: $secondary;
+    border-color: $secondary;
+    color: #ffffff;
+  }
+
+  &.p-button-warning {
+    background: $warning;
+    border-color: $warning;
+    color: #ffffff;
+  }
+
+  &.p-button-danger {
+    background: $danger;
+    border-color: $danger;
+    color: #ffffff;
+  }
+
+  // Text/outlined variants should NOT have white text
+  &.p-button-text {
+    color: white;
+    background: rgb(142, 196, 0)  ;
+    border-color: transparent;
+
+    &:enabled:hover {
+      background: rgba($primary, 0.06);
+      color: $primary;
+    }
+    &:enabled:focus {
+      box-shadow: 0 0 0 2px rgba($primary, 0.12);
+      color: $primary;
+    }
+
+    &.p-button-success {
+      color: darken($accent, 12%);
+      &:enabled:hover { background: rgba($accent, 0.10); color: darken($accent, 12%); }
+    }
+    &.p-button-info {
+      color: darken($secondary, 12%);
+      &:enabled:hover { background: rgba($secondary, 0.10); color: darken($secondary, 12%); }
+    }
+    &.p-button-warning {
+      color: darken($warning, 8%);
+      &:enabled:hover { background: rgba($warning, 0.10); color: darken($warning, 8%); }
+    }
+    &.p-button-danger {
+      color: $danger;
+      &:enabled:hover { background: rgba($danger, 0.08); color: darken($danger, 8%); }
+    }
+  }
+
+  &.p-button-outlined {
+    color: $primary;
+    background: transparent;
+
+    &:enabled:hover {
+      background: rgba($primary, 0.06);
+      color: $primary;
+    }
+
+    &.p-button-success { color: darken($accent, 12%); &:enabled:hover { background: rgba($accent, 0.08); color: darken($accent, 12%); } }
+    &.p-button-info { color: darken($secondary, 12%); &:enabled:hover { background: rgba($secondary, 0.08); color: darken($secondary, 12%); } }
+    &.p-button-warning { color: darken($warning, 8%); &:enabled:hover { background: rgba($warning, 0.08); color: darken($warning, 8%); } }
+    &.p-button-danger { color: $danger; &:enabled:hover { background: rgba($danger, 0.08); color: darken($danger, 8%); } }
+  }
+}
+
+// Ensure action buttons inside tables always have visible icon colors
+.p-datatable {
+  .p-button.p-button-text {
+    color: white !important;
+    background: rgb(142, 196, 0) !important;
+
+    &:enabled:hover {
+      background: rgba($primary, 0.06) !important;
+      color: $primary !important;
+    }
+
+    &.p-button-success {
+      color: darken($accent, 12%) !important;
+      &:enabled:hover { background: rgba($accent, 0.10) !important; color: darken($accent, 12%) !important; }
+    }
+    &.p-button-danger {
+      color: $danger !important;
+      &:enabled:hover { background: rgba($danger, 0.08) !important; color: darken($danger, 8%) !important; }
+    }
+    &.p-button-info {
+      color: darken($secondary, 12%) !important;
+      &:enabled:hover { background: rgba($secondary, 0.10) !important; color: darken($secondary, 12%) !important; }
+    }
+    &.p-button-warning {
+      color: darken($warning, 8%) !important;
+      &:enabled:hover { background: rgba($warning, 0.10) !important; color: darken($warning, 8%) !important; }
+    }
+  }
+}
+
+// DataTable
+.p-datatable {
+  // Header row
+  .p-datatable-thead > tr > th {
+    background: $surface-100;
+    color: $surface-700;
+    font-weight: 600;
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    padding: 0.75rem 1rem;
+    border-bottom: 2px solid $surface-200;
+    border-right: 1px solid $surface-200;
+    white-space: nowrap;
+    vertical-align: middle;
+    position: relative;
+
+    &:last-child {
+      border-right: none;
+    }
+
+    // Force header content (text + sort icon) onto same line
+    .p-column-header-content {
+      display: flex !important;
+      flex-direction: row !important;
+      align-items: center !important;
+      gap: 0.35rem;
+      flex-wrap: nowrap;
+    }
+
+    // Sort icon alignment
+    .p-sortable-column-icon {
+      display: inline-flex;
+      align-items: center;
+      flex-shrink: 0;
+      margin-left: 0.25rem;
+      font-size: 0.7rem;
+      color: $surface-400;
+    }
+
+    // Column title text
+    .p-column-title {
+      display: inline;
+      white-space: nowrap;
+    }
+
+    // Sortable header hover
+    &.p-sortable-column {
+      transition: background 0.15s ease, color 0.15s ease;
+      cursor: pointer;
+      user-select: none;
+
+      &:hover {
+        background: $surface-200;
+        color: $surface-800;
+
+        .p-sortable-column-icon {
+          color: $surface-600;
+        }
+      }
+
+      &.p-highlight {
+        background: rgba(26, 0, 93, 0.08);
+        color: $primary;
+
+        .p-sortable-column-icon {
+          color: $primary;
+        }
+      }
+    }
+
+    // Checkbox header cell
+    &.p-selection-column {
+      text-align: center;
+    }
+  }
+
+  // Body rows
+  .p-datatable-tbody > tr {
+    transition: background 0.15s ease;
+
+    > td {
+      padding: 0.625rem 1rem;
+      font-size: 0.8125rem;
+      border-bottom: 1px solid $surface-100;
+      vertical-align: middle;
+    }
+
+    &:hover {
+      background: rgba(26, 0, 93, 0.03) !important;
+    }
+
+    &.p-highlight {
+      background: rgba(26, 0, 93, 0.06) !important;
+      color: $primary;
+    }
+  }
+
+  // Paginator
+  .p-paginator {
+    border: none;
+    padding: 0.75rem 0;
+  }
+
+  // Resizable column handle
+  .p-column-resizer {
+    border-right: 1px solid transparent;
+    &:hover {
+      border-right-color: $primary;
+    }
+  }
+
+  // SM size variant
+  &.p-datatable-sm {
+    .p-datatable-thead > tr > th {
+      padding: 0.625rem 0.875rem;
+    }
+    .p-datatable-tbody > tr > td {
+      padding: 0.5rem 0.875rem;
+    }
+  }
+}
+
+// Input Fields
+.p-inputtext {
+  border-radius: $border-radius;
+  border: 1px solid $surface-300;
+  font-size: 14px;
+  padding: 10px 14px;
+  transition: border-color 0.2s, box-shadow 0.2s;
+
+  &:focus {
+    border-color: $primary;
+    box-shadow: 0 0 0 3px rgba(26, 0, 93, 0.12);
+  }
+
+  &.ng-invalid.ng-dirty {
+    border-color: $danger;
+    box-shadow: 0 0 0 3px rgba(255, 88, 93, 0.12);
+  }
+}
+
+// Dropdown
+.p-dropdown {
+  border-radius: $border-radius;
+  border: 1px solid $surface-300;
+}
+
+// Calendar
+.p-calendar .p-inputtext {
+  border-radius: $border-radius 0 0 $border-radius;
+}
+
+// Card
+.p-card {
+  border-radius: $border-radius;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+  border: 1px solid $surface-100;
+}
+
+// Dialog
+.p-dialog {
+  border-radius: 12px;
+  overflow: hidden;
+
+  .p-dialog-header {
+    padding: 20px 24px;
+    background: $surface-50;
+    border-bottom: 1px solid $surface-200;
+  }
+
+  .p-dialog-content {
+    padding: 24px;
+  }
+
+  .p-dialog-footer {
+    padding: 16px 24px;
+    border-top: 1px solid $surface-200;
+  }
+}
+
+// Toast
+.p-toast .p-toast-message {
+  border-radius: $border-radius;
+
+  &.p-toast-message-success {
+    border-left: 4px solid $accent;
+  }
+  &.p-toast-message-info {
+    border-left: 4px solid $secondary;
+  }
+  &.p-toast-message-warn {
+    border-left: 4px solid $warning;
+  }
+  &.p-toast-message-error {
+    border-left: 4px solid $danger;
+  }
+}
+
+// Tag / Badge
+.p-tag {
+  border-radius: 20px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  padding: 4px 10px;
+}
+
+// Chip
+.p-chip {
+  border-radius: 20px;
+}
+
+// Menu
+.p-menuitem-link {
+  border-radius: 6px !important;
+}
+
+// TabView
+.p-tabview {
+  .p-tabview-nav {
+    border-bottom: 2px solid $surface-200;
+
+    li.p-highlight .p-tabview-nav-link {
+      border-color: $primary;
+      color: $primary;
+    }
+  }
+}
+
+// Chart
+.p-chart {
+  canvas {
+    border-radius: $border-radius;
+  }
+}

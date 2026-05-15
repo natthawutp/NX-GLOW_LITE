@@ -1,0 +1,10 @@
+frontend/node_modules
+backend/.gradle
+*.log
+*.tmp
+backend/build
+frontend/.angular
+frontend/dist
+backend/src/main/webapp
+backend/bin
+*.sql

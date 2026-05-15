@@ -1,0 +1,92 @@
+# ============================================================
+# GWH Transaction / Receiving Configuration
+# Controls behavior of InboundReceiveService and related flows.
+#
+# Legacy source: GwhBgga1Apins010-030 BLC, GWH_TM_PRCC,
+#                GWH_TM_CODE, GWH_TM_TRN, GWH_TM_CUST, GWH_TM_WHS
+#
+# Bind with: @ConfigurationProperties(prefix = "gwh.transaction")
+# ============================================================
+
+gwh:
+  transaction:
+
+    # ==========================================================
+    # Receiving / Inspection Configuration
+    # ==========================================================
+    receiving:
+      # Valid transaction kinds for arrival operations
+      # Legacy ref: GWH_TM_TRN.TRN_AVUS_FLG='Y'
+      validArrivalTransactionKinds:
+        - "001"
+
+      # Area code byte length for input validation (0 = disabled)
+      # Legacy ref: GWH_TM_WHS.WHS_ABYT
+      areaCodeByteLength: 3
+
+      # Location search kind for auto-assigning putaway location
+      # "1" = final shelving (last putaway of same product)
+      # "2" = maximum stock (location with most existing stock)
+      # "3" = product recommended location only
+      # Legacy ref: GWH_TM_CUST.CUST_LOCS_KND
+      locationSearchKind: "3"
+
+      # Customer default arrival area when no product/shelving location found
+      # Legacy ref: GWH_TM_CUST.CUST_AV_AREA/RACK/PSTN/LVL
+      defaultArrivalArea:
+        areaCode: ""
+        rackCode: ""
+        positionCode: ""
+        levelCode: ""
+
+      # HHT inspection mode: AVR_OP_FLG='N' (deferred putaway), skip location validation
+      # Legacy ref: GWH_TM_CODE KND=477 COD=01 INFO1='Y'
+      hhtInspectionMode:
+        enabled: false
+
+      # PIK date format codes for date-type PIK slots
+      # Legacy ref: GWH_TM_CODE KND=042
+      pikDateFormats:
+        "01": "yyyyMMdd"
+        "02": "yyyy/MM/dd"
+        "03": "yyyy-MM-dd"
+        "04": "dd/MM/yyyy"
+
+      # Weight and volume overflow limits (0 = no limit)
+      # Legacy ref: GwhDataUtils weight/volume precision checks
+      limits:
+        maxLineWeightKg: 99999.999
+        maxLineVolumeM3: 9999.9999
+        maxTotalWeightKg: 999999.999
+        maxTotalVolumeM3: 99999.9999
+
+    # ==========================================================
+    # Status Progression
+    # Legacy ref: GWH_TM_PRCC (Process Status Control)
+    # ==========================================================
+    statusProgression:
+      arrival:
+        ready: "200"           # AVH_AV_STS: Located / ready for receiving
+        receiving: "300"       # AVH_AV_STS: Receiving in-progress
+        inspectedExact: "209"  # AVH_AV_STS: Inspected — exact qty match
+        inspectedDiscrepancy: "205"  # AVH_AV_STS: Inspected — accepted discrepancy (over/short)
+
+    # ==========================================================
+    # Error Codes (mapped from legacy ERR messages)
+    # ==========================================================
+    errorCodes:
+      ERR1027: "Arrival is not in a valid status for receiving"
+      ERR1029: "Arrival has already completed receiving"
+      ERR3252: "Transaction kind is not permitted for arrival operations"
+      ERR1033: "Over-receive is not permitted for this transaction kind"
+      ERR1034: "Short receive is not permitted — all lines must be fully received"
+      ERR0004: "Location does not exist in the location master"
+      ERR0023: "Area code exceeds the configured byte length"
+      ERR1026: "No valid putaway location found for this product"
+      ERR1346: "Cannot mix different SKU attributes at the same location"
+      ERR1348: "Location temperature control does not match product requirement"
+      ERR0264: "Quantity exceeds numeric precision limit"
+      ERR1036: "Line weight exceeds maximum allowed"
+      ERR1037: "Line volume exceeds maximum allowed"
+      ERR1038: "Total weight exceeds maximum allowed"
+      ERR1003: "Total volume exceeds maximum allowed"

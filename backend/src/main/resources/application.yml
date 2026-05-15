@@ -1,0 +1,126 @@
+# ============================================================
+# GWH Modern WMS - Application Configuration
+# ============================================================
+
+spring:
+  application:
+    name: gwh-modern-wms
+
+  config:
+    import:
+      - optional:classpath:gwh-config.yml
+      - optional:classpath:gwh-trans-config.yml
+
+  # ---------- JPA / Datasource ----------
+  datasource:
+    url: jdbc:oracle:thin:@gwhy1rd010.cahtpzs4ek5f.ap-northeast-1.rds.amazonaws.com:1521:RDBGWH01
+    username: MNTGWH02
+    password: fsdllmlaed
+    driver-class-name: oracle.jdbc.OracleDriver
+    hikari:
+      maximum-pool-size: 20
+      minimum-idle: 5
+      connection-timeout: 30000
+      initialization-fail-timeout: -1
+
+  jpa:
+    database-platform: org.hibernate.dialect.Oracle12cDialect
+    hibernate:
+      ddl-auto: none  # We use existing Oracle schema - no auto DDL
+    show-sql: false
+    properties:
+      hibernate:
+        format_sql: true
+        default_schema: GWH
+
+  # ---------- Jackson ----------
+  jackson:
+    serialization:
+      write-dates-as-timestamps: false
+    default-property-inclusion: non_null
+    date-format: yyyy-MM-dd'T'HH:mm:ss
+
+  # ---------- i18n ----------
+  messages:
+    basename: i18n/messages
+    encoding: UTF-8
+    fallback-to-system-locale: false
+
+  # ---------- MVC ----------
+  mvc:
+    pathmatch:
+      matching-strategy: ant-path-matcher
+
+  # ---------- Servlet ----------
+  servlet:
+    multipart:
+      max-file-size: 50MB
+      max-request-size: 50MB
+
+# ---------- Server ----------
+server:
+  port: 8080
+  servlet:
+    context-path: /gwh-modern
+  compression:
+    enabled: true
+    mime-types: application/json,application/xml,text/html,text/css,application/javascript
+
+# ---------- JWT Configuration ----------
+gwh:
+  jwt:
+    secret: GwhModernWms2026SecureEnterpriseSecretKeyForJwtTokenGenerationAndValidationSystem
+    access-token-expiration: 900000      # 15 minutes
+    refresh-token-expiration: 604800000  # 7 days
+    issuer: gwh-modern-wms
+
+  # ---------- Multi-Tenant ----------
+  tenant:
+    default-company: "520010"
+    default-warehouse: "SP"
+
+# ---------- Logging ----------
+logging:
+  level:
+    root: INFO
+    jp.co.nittsu.gwh: DEBUG
+    org.springframework.security: INFO
+    org.hibernate.SQL: DEBUG
+    org.hibernate.type.descriptor.sql.BasicBinder: TRACE
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"
+
+# ---------- Actuator ----------
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+  endpoint:
+    health:
+      show-details: when-authorized
+
+# ---------- OpenAPI / Swagger ----------
+springdoc:
+  api-docs:
+    path: /api/v1/api-docs
+  swagger-ui:
+    path: /api/swagger-ui
+    operationsSorter: method
+    tagsSorter: alpha
+
+---
+# WebLogic Profile
+spring:
+  config:
+    activate:
+      on-profile: weblogic
+  datasource:
+    jndi-name: jdbc/sgwh0001
+    driver-class-name: ""
+  jpa:
+    properties:
+      hibernate:
+        transaction:
+          jta:
+            platform: org.hibernate.engine.transaction.jta.platform.internal.WeblogicJtaPlatform

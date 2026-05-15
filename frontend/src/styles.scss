@@ -1,0 +1,224 @@
+// ============================================================
+// GWH Modern WMS - Global Styles
+// ============================================================
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+// Google Fonts
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Noto+Sans+JP:wght@300;400;500;600;700&family=Noto+Sans+Thai:wght@300;400;500;600;700&display=swap');
+
+// ============================================================
+// Base Resets
+// ============================================================
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  font-size: 14px;
+  scroll-behavior: smooth;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  font-family: var(--font-family);
+  color: var(--text-color);
+  background: var(--surface-ground);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+// ============================================================
+// Layout Utilities
+// ============================================================
+
+@layer components {
+  .wms-page {
+    @apply animate-fade-in;
+    padding: var(--content-padding);
+    min-height: calc(100vh - var(--topbar-height));
+  }
+
+  .wms-card {
+    @apply bg-white rounded-wms shadow-card border border-surface-100;
+    transition: box-shadow 0.2s ease;
+
+    &:hover {
+      @apply shadow-card-hover;
+    }
+  }
+
+  .wms-card-header {
+    @apply px-6 py-4 border-b border-surface-200 flex items-center justify-between;
+  }
+
+  .wms-card-body {
+    @apply p-6;
+  }
+
+  .wms-section-title {
+    @apply text-lg font-semibold text-surface-800 mb-4;
+  }
+
+  .wms-label {
+    @apply block text-xs font-semibold text-surface-500 uppercase tracking-wider mb-1.5;
+  }
+
+  // Status badges
+  .wms-status {
+    @apply inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold;
+
+    &--new       { @apply bg-secondary/10 text-secondary; }
+    &--planned   { @apply bg-secondary/10 text-secondary; }
+    &--active    { @apply bg-primary/10 text-primary; }
+    &--picking   { @apply bg-warning/10 text-warning; }
+    &--packing   { @apply bg-accent/10 text-accent-700; }
+    &--shipped   { @apply bg-accent/10 text-accent-700; }
+    &--completed { @apply bg-accent/10 text-accent-700; }
+    &--cancelled { @apply bg-danger/10 text-danger; }
+    &--overdue   { @apply bg-danger/10 text-danger; }
+    &--warning   { @apply bg-warning/10 text-warning; }
+  }
+
+  // KPI stat card
+  .wms-stat-card {
+    @apply wms-card p-5 flex flex-col gap-2;
+
+    .stat-icon {
+      @apply w-10 h-10 rounded-lg flex items-center justify-center text-lg;
+    }
+
+    .stat-value {
+      @apply text-2xl font-bold text-surface-800;
+    }
+
+    .stat-label {
+      @apply text-sm text-surface-500;
+    }
+
+    .stat-trend {
+      @apply text-xs font-medium flex items-center gap-1;
+
+      &.up   { @apply text-accent-700; }
+      &.down { @apply text-danger; }
+    }
+  }
+
+  // Loading skeleton
+  .wms-skeleton {
+    @apply bg-surface-200 rounded animate-pulse;
+  }
+
+  // Alert ribbons
+  .wms-alert {
+    @apply flex items-start gap-3 p-4 rounded-wms text-sm;
+
+    &--info    { @apply bg-secondary/10 text-secondary border border-secondary/20; }
+    &--success { @apply bg-accent/10 text-accent-800 border border-accent/20; }
+    &--warning { @apply bg-warning/10 text-warning-600 border border-warning/20; }
+    &--danger  { @apply bg-danger/10 text-danger border border-danger/20; }
+  }
+
+  // Consistent high-contrast action buttons inside page headers.
+  wms-page-header .header-actions .p-button {
+    border-radius: 10px !important;
+    min-height: 34px;
+    padding: 0.45rem 0.9rem !important;
+    font-weight: 600;
+    letter-spacing: 0.01em;
+    transition: all 0.18s ease;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
+  }
+
+  wms-page-header .header-actions .p-button:not(.p-button-outlined):not(.p-button-text) {
+    background: rgb(142, 196, 0) !important;
+    border-color: rgb(142, 196, 0) !important;
+    color: #1f2937 !important;
+  }
+
+  wms-page-header .header-actions .p-button:not(.p-button-outlined):not(.p-button-text):hover {
+    background: rgb(124, 176, 0) !important;
+    border-color: rgb(124, 176, 0) !important;
+    box-shadow: 0 4px 12px rgba(124, 176, 0, 0.28);
+    transform: translateY(-1px);
+  }
+
+  wms-page-header .header-actions .p-button.p-button-outlined {
+    background: #ffffff !important;
+    border-color: #cbd5e1 !important;
+    color: #334155 !important;
+  }
+
+  wms-page-header .header-actions .p-button.p-button-outlined:hover {
+    background: #f8fafc !important;
+    border-color: #94a3b8 !important;
+    color: #0f172a !important;
+  }
+
+  wms-page-header .header-actions .p-button:focus {
+    box-shadow: 0 0 0 3px rgba(142, 196, 0, 0.28) !important;
+  }
+}
+
+// ============================================================
+// Scrollbar Styling
+// ============================================================
+
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.15);
+  border-radius: 10px;
+
+  &:hover {
+    background: rgba(0, 0, 0, 0.25);
+  }
+}
+
+// ============================================================
+// Animations
+// ============================================================
+
+.fade-enter {
+  animation: fadeIn 0.3s ease-in-out;
+}
+
+.slide-enter {
+  animation: slideUp 0.25s ease-out;
+}
+
+// Page transition
+router-outlet + * {
+  animation: fadeIn 0.2s ease-in-out;
+}
+
+// ============================================================
+// Print Styles
+// ============================================================
+
+@media print {
+  .wms-sidebar,
+  .wms-topbar,
+  .wms-action-bar,
+  .p-toast {
+    display: none !important;
+  }
+
+  .wms-page {
+    padding: 0 !important;
+    margin: 0 !important;
+  }
+}
