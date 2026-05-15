@@ -4,6 +4,7 @@ import { RouterModule, Router, NavigationEnd } from '@angular/router';
 import { TranslateModule, TranslateService } from '@ngx-translate/core';
 import { filter, Subscription } from 'rxjs';
 import { AuthService } from '@core/services/auth.service';
+import { environment } from '@env/environment';
 
 export interface MenuItem {
   label: string;
@@ -33,8 +34,8 @@ export interface MenuItem {
             </svg>
           </div>
           <div class="logo-text" *ngIf="!collapsed()">
-            <span class="logo-name">NX GLOW</span>
-            <span class="logo-sub" style="color: #8EC400">Lite</span>
+            <span class="logo-name">{{ appNamePrimary }}</span>
+            <span class="logo-sub" style="color: #8EC400">{{ appNameAccent }}</span>
           </div>
         </div>
         <button class="collapse-btn" (click)="toggleCollapse()" *ngIf="!isMobile">
@@ -94,7 +95,7 @@ export interface MenuItem {
       <!-- Footer -->
       <div class="sidebar-footer" *ngIf="!collapsed()">
         <div class="version-info">
-          <span>v1.0.0</span>
+          <span>v{{ appVersion }}</span>
         </div>
       </div>
     </aside>
@@ -367,6 +368,9 @@ export interface MenuItem {
   `]
 })
 export class SidebarComponent implements OnInit, OnDestroy {
+  readonly appNamePrimary = environment.appNamePrimary;
+  readonly appNameAccent = environment.appNameAccent;
+  readonly appVersion = environment.appVersion;
   collapsed = signal(false);
   mobileOpen = signal(false);
   isMobile = false;
@@ -431,6 +435,18 @@ export class SidebarComponent implements OnInit, OnDestroy {
       icon: 'pi pi-chart-bar',
       routerLink: '/reports',
       roles: ['ADMIN', 'REPORTS']
+    },
+    {
+      label: 'Warehouse Optimize',
+      icon: 'pi pi-compass',
+      children: [
+        { label: 'Design', icon: '', routerLink: '/warehouse-optimize/design' },
+        { label: '2D Result', icon: '', routerLink: '/warehouse-optimize/view-2d' },
+        { label: '3D Live', icon: '', routerLink: '/warehouse-optimize/view-3d' },
+        { label: 'Slotting', icon: '', routerLink: '/warehouse-optimize/slotting' },
+        { label: 'Routes', icon: '', routerLink: '/warehouse-optimize/routes' },
+        { label: 'Analytics', icon: '', routerLink: '/warehouse-optimize/analytics' }
+      ]
     }
   ];
 

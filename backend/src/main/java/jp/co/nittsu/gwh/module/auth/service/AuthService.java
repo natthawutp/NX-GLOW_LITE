@@ -30,7 +30,7 @@ public class AuthService {
     private static final Logger logger = LoggerFactory.getLogger(AuthService.class);
 
     private static final String DEV_BYPASS_EMAIL = "admin@wms.com";
-    private static final String DEV_BYPASS_COMPANY = "520010";
+    private static final String DEV_BYPASS_COMPANY = "520002";
 
     @Autowired
     private AuthenticationManager authenticationManager;

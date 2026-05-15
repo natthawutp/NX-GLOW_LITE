@@ -9,6 +9,7 @@ import { ProgressSpinnerModule } from 'primeng/progressspinner';
 import { InputTextModule } from 'primeng/inputtext';
 import { AuthService } from '@core/services/auth.service';
 import { TenantOption } from '@core/models/auth.model';
+import { environment } from '@env/environment';
 
 interface WarehouseGroup {
   warehouseCode: string;
@@ -35,8 +36,8 @@ interface WarehouseGroup {
               <circle cx="28" cy="28" r="5" fill="#8EC400"/>
             </svg>
           </div>
-          <h1 class="brand-title">GWH Modern WMS</h1>
-          <p class="brand-subtitle">Enterprise Warehouse Management System</p>
+          <h1 class="brand-title">{{ appName }}</h1>
+          <p class="brand-subtitle">{{ appSubtitle }}</p>
 
           <div class="brand-features">
             <div class="feature-item">
@@ -57,7 +58,7 @@ interface WarehouseGroup {
         </div>
 
         <div class="branding-footer">
-          <span>&copy; {{ currentYear }} GWH Warehouse Solutions</span>
+          <span>&copy; {{ currentYear }} {{ companyName }}</span>
         </div>
 
         <div class="bg-circle bg-circle-1"></div>
@@ -610,6 +611,9 @@ interface WarehouseGroup {
   `]
 })
 export class SelectTenantComponent implements OnInit {
+  readonly appName = environment.appName;
+  readonly appSubtitle = environment.appSubtitle;
+  readonly companyName = environment.companyName;
   isLoading = signal(false);
   isSubmitting = signal(false);
   errorMessage = signal('');

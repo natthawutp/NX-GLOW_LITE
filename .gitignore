@@ -8,3 +8,6 @@ frontend/dist
 backend/src/main/webapp
 backend/bin
 *.sql
+Picking Optimization
+backend/src/main/resources/application.yml
+ 

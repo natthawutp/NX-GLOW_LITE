@@ -132,13 +132,18 @@ export class BreadcrumbComponent {
     }
 
     for (const child of children) {
-      const routeURL = child.snapshot.url.map(segment => segment.path).join('/');
+      const snapshot = child?.snapshot;
+      if (!snapshot) {
+        continue;
+      }
+
+      const routeURL = (snapshot.url ?? []).map(segment => segment.path).join('/');
       if (routeURL !== '') {
         url += `/${routeURL}`;
       }
 
-      const label = child.snapshot.data['breadcrumb'];
-      const icon = child.snapshot.data['icon'];
+      const label = snapshot.data['breadcrumb'];
+      const icon = snapshot.data['icon'];
 
       if (label) {
         breadcrumbs.push({

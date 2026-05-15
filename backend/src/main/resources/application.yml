@@ -2,6 +2,11 @@
 # GWH Modern WMS - Application Configuration
 # ============================================================
 
+#DEV fsdllmlaed : gwhy1rd010.cahtpzs4ek5f.ap-northeast-1.rds.amazonaws.com
+#TST vkfewelv : gwht1rd010.cahtpzs4ek5f.ap-northeast-1.rds.amazonaws.com
+#PRD jfeobkse : gwh01rd010.cahtpzs4ek5f.ap-northeast-1.rds.amazonaws.com
+
+
 spring:
   application:
     name: gwh-modern-wms
@@ -108,6 +113,17 @@ springdoc:
     path: /api/swagger-ui
     operationsSorter: method
     tagsSorter: alpha
+
+warehouse-optimize:
+  datasource:
+    url: ${WOZ_DB_URL:jdbc:postgresql://nth0idb020.cluster-c6py5lvcunht.ap-northeast-1.rds.amazonaws.com:5432/basicsdb}
+    username: ${WOZ_DB_USERNAME:dbu_beg}
+    password: ${WOZ_DB_PASSWORD:nsaobeg}
+    driver-class-name: org.postgresql.Driver
+    hikari:
+      maximum-pool-size: 10
+      minimum-idle: 1
+      connection-timeout: 30000
 
 ---
 # WebLogic Profile

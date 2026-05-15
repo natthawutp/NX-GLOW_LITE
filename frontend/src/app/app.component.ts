@@ -1,5 +1,6 @@
 import { Component, OnInit } from '@angular/core';
 import { RouterOutlet } from '@angular/router';
+import { Title } from '@angular/platform-browser';
 import { TranslateService } from '@ngx-translate/core';
 import { ToastModule } from 'primeng/toast';
 import { ConfirmDialogModule } from 'primeng/confirmdialog';
@@ -30,9 +31,13 @@ import { environment } from '@env/environment';
 export class AppComponent implements OnInit {
   toastLife = environment.toastLife;
 
-  constructor(private translate: TranslateService) {}
+  constructor(
+    private translate: TranslateService,
+    private title: Title
+  ) {}
 
   ngOnInit(): void {
+    this.title.setTitle(environment.appName);
     const savedLocale = localStorage.getItem('wms_locale') || environment.defaultLocale;
     this.translate.addLangs(environment.supportedLocales);
     this.translate.setDefaultLang(environment.defaultLocale);

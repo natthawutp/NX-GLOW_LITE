@@ -223,6 +223,53 @@ export const routes: Routes = [
         data: { breadcrumb: 'nav.reports', icon: 'pi pi-chart-bar' },
         loadComponent: () =>
           import('@features/reports/reports.component').then(m => m.ReportsComponent)
+      },
+      {
+        path: 'warehouse-optimize',
+        data: { breadcrumb: 'Warehouse Optimize', icon: 'pi pi-compass' },
+        children: [
+          {
+            path: '',
+            redirectTo: 'design',
+            pathMatch: 'full'
+          },
+          {
+            path: 'design',
+            loadComponent: () =>
+              import('@features/warehouse-optimize/warehouse-optimize-design.component').then(m => m.WarehouseOptimizeDesignComponent),
+            data: { breadcrumb: 'Design' }
+          },
+          {
+            path: 'view-2d',
+            loadComponent: () =>
+              import('@features/warehouse-optimize/warehouse-optimize-view2d.component').then(m => m.WarehouseOptimizeView2dComponent),
+            data: { breadcrumb: '2D Result' }
+          },
+          {
+            path: 'view-3d',
+            loadComponent: () =>
+              import('@features/warehouse-optimize/warehouse-optimize-view3d.component').then(m => m.WarehouseOptimizeView3dComponent),
+            data: { breadcrumb: '3D Live' }
+          },
+          {
+            path: 'slotting',
+            loadComponent: () =>
+              import('@features/warehouse-optimize/warehouse-optimize-slotting.component').then(m => m.WarehouseOptimizeSlottingComponent),
+            data: { breadcrumb: 'Slotting' }
+          },
+          {
+            path: 'routes',
+            loadComponent: () =>
+              import('@features/warehouse-optimize/warehouse-optimize-routes.component').then(m => m.WarehouseOptimizeRoutesComponent),
+            data: { breadcrumb: 'Routes' }
+          },
+          {
+            path: 'analytics',
+            loadComponent: () =>
+              import('@features/warehouse-optimize/warehouse-optimize-analytics.component').then(m => m.WarehouseOptimizeAnalyticsComponent),
+            data: { breadcrumb: 'Analytics' }
+          }
+        ]
       }
     ]
   },

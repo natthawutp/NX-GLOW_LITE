@@ -1,0 +1,280 @@
+export interface CustomerOption {
+  warehouseCode: string;
+  customerCode: string;
+  customerName: string;
+}
+
+export interface WarehouseProfileSummary {
+  id: number;
+  companyCode: string;
+  warehouseCode: string;
+  customerCode: string;
+  profileName: string;
+  description: string | null;
+  warehouseLength: number | null;
+  warehouseWidth: number | null;
+  createdAt: string | null;
+  updatedAt: string | null;
+  sharedProfile: boolean;
+}
+
+export interface WarehouseLayoutLocation {
+  location: string;
+  zone: string | null;
+  type: string | null;
+  level: number | null;
+  aisle: number | null;
+  position: number | null;
+  side: string | null;
+  x: number | null;
+  y: number | null;
+  slottedClass?: string | null;
+  slottedSku?: string | null;
+}
+
+export interface WarehouseBoundaryPoint {
+  x: number;
+  y: number;
+}
+
+export interface WarehouseAisle {
+  id: number;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  type: string;
+  direction?: string | null;
+  levels: number;
+  zone: string;
+  bayWidth: number;
+  bayDepth: number;
+  aisleWidth: number;
+  tunnelLevelFrom?: number | null;
+  tunnelLevelTo?: number | null;
+  pickFaceLevels?: number[] | null;
+  startPointX?: number | null;
+  startPointY?: number | null;
+  baseLocations?: WarehouseLayoutLocation[] | null;
+  locations: WarehouseLayoutLocation[];
+}
+
+export interface WarehouseLayout {
+  warehouseWidth: number;
+  warehouseHeight: number;
+  boundaryPolygon?: WarehouseBoundaryPoint[] | null;
+  aisles: WarehouseAisle[];
+}
+
+export type WarehouseDesignerLayout = WarehouseLayout;
+
+export interface WarehouseProfileDetail extends WarehouseProfileSummary {
+  layoutData: string;
+  locations: WarehouseLayoutLocation[];
+}
+
+export interface ProductRecord {
+  id?: number;
+  sku: string;
+  name: string;
+  category: string | null;
+  weight: number | null;
+  volume: number | null;
+  width: number | null;
+  height: number | null;
+  depth: number | null;
+  demandFrequency: number | null;
+  velocityClass: string | null;
+  variabilityClass: string | null;
+  uom: string | null;
+  picksPerDay: number | null;
+  avgQtyPerPick: number | null;
+}
+
+export interface SlottingAssignment {
+  id?: number;
+  profileId: number;
+  customerCode: string;
+  location: string;
+  zone: string | null;
+  productSku: string;
+  productName: string;
+  productCategory: string | null;
+  velocityClass: string | null;
+  demandFrequency: number | null;
+  assignmentScore: number | null;
+  assignmentReason: string | null;
+  assignedAt?: string | null;
+}
+
+export interface OrderLine {
+  id?: number;
+  sku: string;
+  productName: string;
+  location: string;
+  quantity: number;
+  pickSequence: number | null;
+  originalSequence: number | null;
+}
+
+export interface PickOrder {
+  id: number;
+  profileId: number;
+  customerCode: string;
+  orderNumber: string;
+  priority: number;
+  status: string;
+  linesCount: number;
+  totalQuantity: number;
+  createdAt: string | null;
+  optimizedAt: string | null;
+  lines: OrderLine[];
+}
+
+export interface RouteNode {
+  name: string;
+  sku?: string | null;
+  x: number | null;
+  y: number | null;
+  level: number | null;
+}
+
+export interface RouteResult {
+  method: string;
+  route: string[];
+  distance: number;
+  percent: number | null;
+}
+
+export interface RouteOptimizationResult {
+  orderId: number;
+  startPoint: RouteNode;
+  original: RouteResult;
+  optimized: RouteResult[];
+  best: RouteResult;
+  comparison: RouteResult[];
+}
+
+export interface VelocityDistribution {
+  velocityClass: string;
+  count: number;
+  avgScore: number | null;
+}
+
+export interface ZoneDistribution {
+  zone: string;
+  count: number;
+}
+
+export interface AlgorithmComparison {
+  algorithm: string;
+  orderCount: number;
+  avgOriginalDistance: number | null;
+  avgOptimizedDistance: number | null;
+  avgImprovement: number | null;
+}
+
+export interface BestAlgorithmUse {
+  algorithm: string;
+  timesBest: number;
+}
+
+export interface SlottingAnalytics {
+  velocityDistribution: VelocityDistribution[];
+  zoneDistribution: ZoneDistribution[];
+}
+
+export interface PickingAnalytics {
+  algorithmComparison: AlgorithmComparison[];
+  bestAlgorithmUsage: BestAlgorithmUse[];
+  totalOrders: number;
+  optimizedOrders: number;
+}
+
+export interface WarehouseOptimizeAnalytics {
+  slotting: SlottingAnalytics;
+  picking: PickingAnalytics;
+}
+
+export interface ViewerDiagnostics {
+  unmatchedLayoutLocations: string[];
+  unmatchedStockLocations: string[];
+}
+
+export interface LiveLocationState {
+  location: string;
+  zone: string | null;
+  type: string | null;
+  level: number | null;
+  x: number | null;
+  y: number | null;
+  customerCode: string;
+  productCode: string | null;
+  productCategory: string | null;
+  velocityClass: string | null;
+  colorClass: string;
+  physicalQty: number | null;
+  availableQty: number | null;
+  blink: boolean;
+  updatedAt: string | null;
+}
+
+export interface StockSyncSnapshot {
+  profileId: number;
+  customerCode: string;
+  syncedAt: string;
+  cursor: string;
+  locations: LiveLocationState[];
+  diagnostics: ViewerDiagnostics;
+}
+
+export interface StockDelta {
+  profileId: number;
+  customerCode: string;
+  previousCursor: string | null;
+  cursor: string;
+  changedLocations: LiveLocationState[];
+  diagnostics: ViewerDiagnostics;
+}
+
+export interface ProductsSummaryResponse {
+  success: boolean;
+  count: number;
+  summary?: Record<string, number>;
+}
+
+export interface SlottingAssignmentsResponse {
+  assignments: SlottingAssignment[];
+  count: number;
+  summary: Record<string, number>;
+}
+
+export interface OrdersMutationResponse {
+  success: boolean;
+  ordersCreated: number;
+  linesCreated: number;
+}
+
+export interface LayoutGeneratorConfig {
+  warehouseWidth: number;
+  warehouseHeight: number;
+  aisleCount: number;
+  baysPerAisle: number;
+  levels: number;
+  zonePrefix: string;
+  rackType: string;
+  bayWidth: number;
+  bayDepth: number;
+  aisleWidth: number;
+  startX: number;
+  startY: number;
+}
+
+export interface LayoutStats {
+  aisles: number;
+  locations: number;
+  highRack: number;
+  shelf: number;
+  driveIn: number;
+  floor: number;
+}

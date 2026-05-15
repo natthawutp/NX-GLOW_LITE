@@ -34,8 +34,11 @@ import { environment } from '@env/environment';
               <circle cx="28" cy="28" r="5" fill="#8EC400"/>
             </svg>
           </div>
-          <h1 class="brand-title">NX GLOW </h1> <h3 class="brand-title" style="color: #8EC400">Lite</h3>
-          <p class="brand-subtitle">Enterprise Warehouse Management System</p>
+          <div class="brand-name-row">
+            <h1 class="brand-title">{{ appNamePrimary }}</h1>
+            <h3 class="brand-title brand-title-accent" *ngIf="appNameAccent">{{ appNameAccent }}</h3>
+          </div>
+          <p class="brand-subtitle">{{ appSubtitle }}</p>
 
           <div class="brand-features">
             <div class="feature-item">
@@ -69,7 +72,7 @@ import { environment } from '@env/environment';
         </div>
 
         <div class="branding-footer">
-          <span>&copy; {{ currentYear }} GWH Warehouse Solutions</span>
+          <span>&copy; {{ currentYear }} {{ companyName }}</span>
         </div>
 
         <!-- Background decorations -->
@@ -159,7 +162,7 @@ import { environment } from '@env/environment';
           </form>
 
           <div class="form-footer">
-            <span class="powered-by">Powered by GWH Modern WMS v1.0</span>
+            <span class="powered-by">Powered by {{ appName }} v{{ appVersion }}</span>
           </div>
         </div>
       </div>
@@ -189,6 +192,14 @@ import { environment } from '@env/environment';
       z-index: 2;
     }
 
+    .brand-name-row {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: baseline;
+      gap: 10px;
+      margin-bottom: 8px;
+    }
+
     .brand-logo {
       margin-bottom: 24px;
     }
@@ -197,8 +208,12 @@ import { environment } from '@env/environment';
       font-size: 32px;
       font-weight: 800;
       letter-spacing: -0.5px;
-      margin: 0 0 8px;
+      margin: 0;
       line-height: 1.1;
+    }
+
+    .brand-title-accent {
+      color: #8EC400;
     }
 
     .brand-subtitle {
@@ -446,6 +461,12 @@ import { environment } from '@env/environment';
   `]
 })
 export class LoginComponent implements OnInit {
+  readonly appName = environment.appName;
+  readonly appNamePrimary = environment.appNamePrimary;
+  readonly appNameAccent = environment.appNameAccent;
+  readonly appSubtitle = environment.appSubtitle;
+  readonly companyName = environment.companyName;
+  readonly appVersion = environment.appVersion;
   isLoading = signal(false);
   errorMessage = signal('');
 
