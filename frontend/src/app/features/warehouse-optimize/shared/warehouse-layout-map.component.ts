@@ -42,14 +42,14 @@ import {
             <rect
               class="aisle-outline"
               [attr.x]="padding + aisle.x"
-              [attr.y]="padding + aisle.y"
+              [attr.y]="aisleY(aisle)"
               [attr.width]="aisle.width"
               [attr.height]="aisle.height">
             </rect>
             <text
               class="aisle-label"
               [attr.x]="padding + aisle.x + 0.75"
-              [attr.y]="padding + aisle.y - 0.5">
+              [attr.y]="aisleY(aisle) - 0.5">
               {{ aisle.zone }}
             </text>
           </g>
@@ -236,8 +236,20 @@ export class WarehouseLayoutMapComponent {
     return this.padding + (location.x ?? 0);
   }
 
+  aisleY(aisle: WarehouseAisle): number {
+    const layout = this.layout();
+    if (!layout) {
+      return this.padding;
+    }
+    return this.padding + layout.warehouseHeight - aisle.y - aisle.height;
+  }
+
   cellY(location: WarehouseLayoutLocation): number {
-    return this.padding + (location.y ?? 0);
+    const layout = this.layout();
+    if (!layout) {
+      return this.padding;
+    }
+    return this.padding + layout.warehouseHeight - (location.y ?? 0) - this.cellHeight(location);
   }
 
   cellWidth(location: WarehouseLayoutLocation): number {

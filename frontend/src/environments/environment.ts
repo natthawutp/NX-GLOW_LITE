@@ -6,7 +6,7 @@ export const environment = {
   jwtTokenKey: 'wms_access_token',
   jwtRefreshKey: 'wms_refresh_token',
   tokenExpiryKey: 'wms_token_expiry',
-  appName: 'GLOW Lite',
+  appName: 'WMS Lite',
   appNamePrimary: 'WMS',
   appNameAccent: 'Lite',
   appSubtitle: 'Iventory/Opitimization',

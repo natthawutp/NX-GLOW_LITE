@@ -140,6 +140,20 @@ export class WarehouseOptimizeView2dComponent {
     this.state.initialize();
 
     effect(() => {
+      const draft = this.state.designDraft();
+      if (draft) {
+        this.selectedProfileId = draft.profileId;
+        this.profileName = draft.profileName;
+        this.layout = normalizeLayout(draft.layout);
+        if (draft.profileId) {
+          this.loadAssignments();
+        } else {
+          this.assignments = [];
+          this.velocitySummary = { A: 0, B: 0, C: 0 };
+        }
+        return;
+      }
+
       const profile = this.state.selectedProfile();
       if (!profile) {
         return;

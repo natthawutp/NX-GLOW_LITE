@@ -3,6 +3,7 @@ import { finalize } from 'rxjs';
 import { AuthService } from '@core/services/auth.service';
 import {
   CustomerOption,
+  WarehouseDesignDraft,
   WarehouseProfileDetail,
   WarehouseProfileSummary
 } from './warehouse-optimize.models';
@@ -19,6 +20,7 @@ export class WarehouseOptimizeStateService {
   readonly profiles = signal<WarehouseProfileSummary[]>([]);
   readonly customers = signal<CustomerOption[]>([]);
   readonly selectedProfile = signal<WarehouseProfileDetail | null>(null);
+  readonly designDraft = signal<WarehouseDesignDraft | null>(null);
   readonly selectedProfileId = signal<number | null>(readStoredNumber(PROFILE_STORAGE_KEY));
   readonly activeCustomerCode = signal<string>(localStorage.getItem(CUSTOMER_STORAGE_KEY) || this.authService.getCustomerCode());
   readonly loadingProfiles = signal(false);
@@ -80,6 +82,10 @@ export class WarehouseOptimizeStateService {
     if (!profileId) {
       return;
     }
+    const draft = this.designDraft();
+    if (draft && draft.profileId !== profileId) {
+      this.clearDesignDraft();
+    }
     this.selectedProfileId.set(profileId);
     localStorage.setItem(PROFILE_STORAGE_KEY, String(profileId));
     this.loadingProfile.set(true);
@@ -119,6 +125,14 @@ export class WarehouseOptimizeStateService {
   setActiveCustomer(customerCode: string): void {
     this.activeCustomerCode.set(customerCode);
     localStorage.setItem(CUSTOMER_STORAGE_KEY, customerCode);
+  }
+
+  setDesignDraft(draft: WarehouseDesignDraft): void {
+    this.designDraft.set(draft);
+  }
+
+  clearDesignDraft(): void {
+    this.designDraft.set(null);
   }
 }
 

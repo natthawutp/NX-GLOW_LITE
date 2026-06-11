@@ -6,7 +6,7 @@ export const environment = {
   jwtTokenKey: 'wms_access_token',
   jwtRefreshKey: 'wms_refresh_token',
   tokenExpiryKey: 'wms_token_expiry',
-  appName: 'NX GLOW Lite',
+  appName: 'WMS Lite',
   appNamePrimary: 'NX GLOW',
   appNameAccent: 'Lite',
   appSubtitle: 'Enterprise Warehouse Management System',

@@ -10,6 +10,7 @@ import {
   inject
 } from '@angular/core';
 import { FormsModule } from '@angular/forms';
+import { finalize } from 'rxjs';
 import { MessageService } from 'primeng/api';
 import { PageHeaderComponent } from '@shared/components/page-header/page-header.component';
 import { WarehouseOptimizeNavComponent } from './shared/warehouse-optimize-nav.component';
@@ -31,6 +32,7 @@ import {
 } from './shared/warehouse-optimize-layout.utils';
 
 type DesignerMode = 'draw' | 'boundary' | 'select' | 'move' | 'delete' | 'measure';
+type SaveState = 'idle' | 'dirty' | 'saving' | 'success' | 'error';
 
 interface PropertyFormModel {
   zone: string;
@@ -137,13 +139,17 @@ function ensureDesignerEngineLoaded(): Promise<void> {
       title="Warehouse Optimize"
       subtitle="Interactive warehouse design with the original drawing workflow"
       icon="pi pi-compass">
+      <span *ngIf="saveStatusText" class="save-state" [class.save-state-dirty]="saveState === 'dirty'" [class.save-state-saving]="saveState === 'saving'" [class.save-state-success]="saveState === 'success'" [class.save-state-error]="saveState === 'error'">
+        <span *ngIf="saveState === 'saving'" class="save-spinner" aria-hidden="true"></span>
+        {{ saveStatusText }}
+      </span>
       <button type="button" class="header-action header-action-secondary" (click)="refreshProfiles()">
         <i class="pi pi-refresh"></i>
         <span>Refresh Profiles</span>
       </button>
-      <button type="button" class="header-action" (click)="saveProfile()">
-        <i class="pi pi-save"></i>
-        <span>Save Layout</span>
+      <button type="button" class="header-action" (click)="saveProfile()" [disabled]="isSaving">
+        <i class="pi" [class.pi-save]="!isSaving" [class.pi-spin]="isSaving" [class.pi-spinner]="isSaving"></i>
+        <span>{{ isSaving ? 'Saving Layout...' : 'Save Layout' }}</span>
       </button>
     </wms-page-header>
 
@@ -171,12 +177,12 @@ function ensureDesignerEngineLoaded(): Promise<void> {
 
         <label class="field">
           <span>Profile name</span>
-          <input type="text" [(ngModel)]="profileName" maxlength="100" />
+          <input type="text" [(ngModel)]="profileName" (ngModelChange)="updateDraftMetadata()" maxlength="100" />
         </label>
 
         <label class="field field-span-2">
           <span>Description</span>
-          <textarea rows="2" [(ngModel)]="description" maxlength="255"></textarea>
+          <textarea rows="2" [(ngModel)]="description" (ngModelChange)="updateDraftMetadata()" maxlength="255"></textarea>
         </label>
 
         <label class="field">
@@ -187,13 +193,6 @@ function ensureDesignerEngineLoaded(): Promise<void> {
         <label class="field">
           <span>Warehouse height (m)</span>
           <input type="number" [(ngModel)]="warehouseHeight" min="10" max="500" step="1" />
-        </label>
-
-        <label class="field">
-          <span>Default type</span>
-          <select [(ngModel)]="defaultType" (ngModelChange)="updateDefaultType($event)">
-            <option *ngFor="let option of storageTypeOptions" [ngValue]="option.value">{{ option.label }}</option>
-          </select>
         </label>
 
         <div class="field field-actions">
@@ -490,14 +489,53 @@ function ensureDesignerEngineLoaded(): Promise<void> {
             </div>
 
             <div class="toolbar-group">
-              <button type="button" class="toggle-btn" [class.active]="showGrid" (click)="toggleGrid()">Grid</button>
-              <button type="button" class="toggle-btn" [class.active]="showLocations" (click)="toggleLocations()">Locations</button>
-              <button type="button" class="toggle-btn" [class.active]="showLabels" (click)="toggleLabels()">Labels</button>
-              <button type="button" class="toggle-btn" [class.active]="showHeatmap" (click)="toggleHeatmap()">Heatmap</button>
+              <button
+                type="button"
+                class="icon-btn toggle-icon-btn"
+                [class.active]="showGrid"
+                title="Toggle grid"
+                aria-label="Toggle grid"
+                (click)="toggleGrid()">
+                <i class="pi pi-th-large"></i>
+              </button>
+              <button
+                type="button"
+                class="icon-btn toggle-icon-btn"
+                [class.active]="showLocations"
+                title="Toggle locations"
+                aria-label="Toggle locations"
+                (click)="toggleLocations()">
+                <i class="pi pi-map-marker"></i>
+              </button>
+              <button
+                type="button"
+                class="icon-btn toggle-icon-btn"
+                [class.active]="showLabels"
+                title="Toggle labels"
+                aria-label="Toggle labels"
+                (click)="toggleLabels()">
+                <i class="pi pi-tag"></i>
+              </button>
+              <button
+                type="button"
+                class="icon-btn toggle-icon-btn"
+                [class.active]="showHeatmap"
+                title="Toggle heatmap"
+                aria-label="Toggle heatmap"
+                (click)="toggleHeatmap()">
+                <i class="pi pi-chart-bar"></i>
+              </button>
             </div>
           </div>
 
           <div class="toolbar-row modes">
+            <label class="toolbar-inline-field">
+              <span>Default type</span>
+              <select [(ngModel)]="defaultType" (ngModelChange)="updateDefaultType($event)">
+                <option *ngFor="let option of storageTypeOptions" [ngValue]="option.value">{{ option.label }}</option>
+              </select>
+            </label>
+
             <button
               *ngFor="let mode of modeOptions"
               type="button"
@@ -566,6 +604,16 @@ function ensureDesignerEngineLoaded(): Promise<void> {
       cursor: pointer;
     }
 
+    .header-action:disabled,
+    .header-action-secondary:disabled,
+    .soft-btn:disabled,
+    .icon-btn:disabled,
+    .toggle-btn:disabled,
+    .mode-btn:disabled {
+      cursor: wait;
+      opacity: 0.7;
+    }
+
     .header-action {
       background: #2563eb;
       border-color: #2563eb;
@@ -575,6 +623,59 @@ function ensureDesignerEngineLoaded(): Promise<void> {
     .header-action-secondary {
       background: #ffffff;
       color: #1e293b;
+    }
+
+    .save-state {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      min-height: 36px;
+      padding: 0 12px;
+      border-radius: 999px;
+      border: 1px solid #dbe2ea;
+      background: #ffffff;
+      color: #475569;
+      font-size: 12px;
+      font-weight: 600;
+    }
+
+    .save-state-dirty {
+      border-color: #fdba74;
+      background: #fff7ed;
+      color: #9a3412;
+    }
+
+    .save-state-saving {
+      border-color: #93c5fd;
+      background: #eff6ff;
+      color: #1d4ed8;
+    }
+
+    .save-state-success {
+      border-color: #86efac;
+      background: #f0fdf4;
+      color: #166534;
+    }
+
+    .save-state-error {
+      border-color: #fca5a5;
+      background: #fef2f2;
+      color: #b91c1c;
+    }
+
+    .save-spinner {
+      width: 12px;
+      height: 12px;
+      border-radius: 999px;
+      border: 2px solid currentColor;
+      border-right-color: transparent;
+      animation: save-spin 0.7s linear infinite;
+    }
+
+    @keyframes save-spin {
+      to {
+        transform: rotate(360deg);
+      }
     }
 
     .panel {
@@ -674,6 +775,7 @@ function ensureDesignerEngineLoaded(): Promise<void> {
       gap: 8px;
       flex-direction: row;
       flex-wrap: wrap;
+      grid-column: span 2;
     }
 
     .workspace-grid {
@@ -882,10 +984,44 @@ function ensureDesignerEngineLoaded(): Promise<void> {
     }
 
     .toggle-btn.active,
+    .toggle-icon-btn.active,
     .mode-btn.active {
       background: #dbeafe;
       border-color: #60a5fa;
       color: #1d4ed8;
+    }
+
+    .toggle-icon-btn {
+      color: #475569;
+    }
+
+    .toolbar-inline-field {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      padding: 0 12px;
+      min-height: 38px;
+      border: 1px solid #d6deea;
+      border-radius: 8px;
+      background: #ffffff;
+    }
+
+    .toolbar-inline-field span {
+      font-size: 12px;
+      font-weight: 600;
+      color: #475569;
+      white-space: nowrap;
+    }
+
+    .toolbar-inline-field select {
+      min-width: 170px;
+      border: 0;
+      background: transparent;
+      color: #0f172a;
+      font-size: 12px;
+      font-weight: 600;
+      padding: 0;
+      outline: none;
     }
 
     .zoom-pill {
@@ -1023,6 +1159,10 @@ function ensureDesignerEngineLoaded(): Promise<void> {
         grid-column: span 1;
       }
 
+      .field-actions {
+        grid-column: span 1;
+      }
+
       .minimap-card {
         position: static;
         width: auto;
@@ -1071,6 +1211,9 @@ export class WarehouseOptimizeDesignComponent implements AfterViewInit {
   showAdvancedJson = false;
   zoomPercent = 100;
   coordinatesText = 'X: -, Y: -';
+  isSaving = false;
+  saveState: SaveState = 'idle';
+  saveStatusText = '';
 
   layout: WarehouseDesignerLayout = createEmptyLayout(this.warehouseWidth, this.warehouseHeight);
   layoutText = prettyLayoutJson(this.layout);
@@ -1083,7 +1226,9 @@ export class WarehouseOptimizeDesignComponent implements AfterViewInit {
 
   private drawer: WarehouseDesignerDrawer | null = null;
   private pendingLayoutData: WarehouseDesignerLayout = this.layout;
+  private pendingLayoutPersistsDraft = false;
   private isMinimapDragging = false;
+  private suppressDraftPersistence = false;
 
   get modeHint(): string {
     return MODE_HINTS[this.activeMode];
@@ -1100,8 +1245,21 @@ export class WarehouseOptimizeDesignComponent implements AfterViewInit {
 
   constructor() {
     this.state.initialize();
+    const draft = this.state.designDraft();
+
+    if (draft) {
+      this.selectedProfileId = draft.profileId;
+      this.profileName = draft.profileName;
+      this.description = draft.description;
+      this.loadLayoutData(draft.layout, false, true);
+      this.setSaveStatus('dirty', 'Unsaved changes');
+    }
 
     effect(() => {
+      if (this.state.designDraft()) {
+        return;
+      }
+
       const profile = this.state.selectedProfile();
       if (!profile) {
         return;
@@ -1113,13 +1271,15 @@ export class WarehouseOptimizeDesignComponent implements AfterViewInit {
 
       try {
         const parsed = JSON.parse(profile.layoutData) as WarehouseDesignerLayout;
-        this.loadLayoutData(parsed, false);
+        this.loadLayoutData(parsed, false, false);
+        this.setSaveStatus('success', this.savedMessage(profile.updatedAt));
       } catch (error) {
         const fallback = createEmptyLayout(
           profile.warehouseWidth ?? this.warehouseWidth,
           profile.warehouseLength ?? this.warehouseHeight
         );
-        this.loadLayoutData(fallback, false);
+        this.loadLayoutData(fallback, false, false);
+        this.setSaveStatus('error', 'Loaded fallback layout');
         this.messageService.add({
           severity: 'warn',
           summary: 'Profile loaded with fallback',
@@ -1184,6 +1344,10 @@ export class WarehouseOptimizeDesignComponent implements AfterViewInit {
     if (this.showAdvancedJson) {
       this.captureDrawerState();
     }
+  }
+
+  updateDraftMetadata(): void {
+    this.persistDraftState();
   }
 
   newBlankLayout(): void {
@@ -1477,8 +1641,13 @@ export class WarehouseOptimizeDesignComponent implements AfterViewInit {
   }
 
   saveProfile(): void {
+    if (this.isSaving) {
+      return;
+    }
+
     this.captureDrawerState();
     if (!this.profileName.trim()) {
+      this.setSaveStatus('error', 'Profile name required');
       this.messageService.add({
         severity: 'warn',
         summary: 'Profile name required',
@@ -1489,6 +1658,8 @@ export class WarehouseOptimizeDesignComponent implements AfterViewInit {
 
     const payload = this.snapshotLayoutData();
     const normalized = normalizeLayout(payload);
+    this.isSaving = true;
+    this.setSaveStatus('saving', 'Saving layout...');
 
     this.service.saveProfile({
       id: this.selectedProfileId,
@@ -1497,15 +1668,31 @@ export class WarehouseOptimizeDesignComponent implements AfterViewInit {
       warehouseLength: normalized.warehouseHeight,
       warehouseWidth: normalized.warehouseWidth,
       layoutData: payload
-    }).subscribe(profile => {
-      this.selectedProfileId = profile.id;
-      this.state.patchSelectedProfile(profile);
-      this.state.refreshProfiles();
-      this.messageService.add({
-        severity: 'success',
-        summary: 'Layout saved',
-        detail: `${profile.profileName} is now available in Warehouse Optimize.`
-      });
+    }).pipe(
+      finalize(() => {
+        this.isSaving = false;
+      })
+    ).subscribe({
+      next: profile => {
+        this.selectedProfileId = profile.id;
+        this.state.patchSelectedProfile(profile);
+        this.state.clearDesignDraft();
+        this.state.refreshProfiles();
+        this.setSaveStatus('success', this.savedMessage(profile.updatedAt));
+        this.messageService.add({
+          severity: 'success',
+          summary: 'Layout saved',
+          detail: `${profile.profileName} is now available in Warehouse Optimize.`
+        });
+      },
+      error: error => {
+        this.setSaveStatus('error', this.saveErrorMessage(error));
+        this.messageService.add({
+          severity: 'error',
+          summary: 'Save failed',
+          detail: this.saveErrorMessage(error)
+        });
+      }
     });
   }
 
@@ -1559,8 +1746,14 @@ export class WarehouseOptimizeDesignComponent implements AfterViewInit {
 
       this.applyDrawerVisualState();
       this.drawer.setMode(this.activeMode);
-      this.drawer.fromJSON(this.pendingLayoutData);
-      this.captureDrawerState();
+      const previousSuppression = this.suppressDraftPersistence;
+      this.suppressDraftPersistence = !this.pendingLayoutPersistsDraft;
+      try {
+        this.drawer.fromJSON(this.pendingLayoutData);
+        this.captureDrawerState();
+      } finally {
+        this.suppressDraftPersistence = previousSuppression;
+      }
       this.updateMinimap();
     } catch (error) {
       this.messageService.add({
@@ -1571,7 +1764,7 @@ export class WarehouseOptimizeDesignComponent implements AfterViewInit {
     }
   }
 
-  private loadLayoutData(layoutData: WarehouseDesignerLayout, resetSelection: boolean): void {
+  private loadLayoutData(layoutData: WarehouseDesignerLayout, resetSelection: boolean, persistDraft = true): void {
     const normalized = normalizeLayout(layoutData);
     const nextLayout: WarehouseDesignerLayout = {
       ...layoutData,
@@ -1582,6 +1775,7 @@ export class WarehouseOptimizeDesignComponent implements AfterViewInit {
     };
 
     this.pendingLayoutData = nextLayout;
+    this.pendingLayoutPersistsDraft = persistDraft;
     this.layout = nextLayout;
     this.layoutText = prettyLayoutJson(nextLayout);
     this.stats = layoutStats(nextLayout);
@@ -1600,12 +1794,20 @@ export class WarehouseOptimizeDesignComponent implements AfterViewInit {
       this.multiSelectionSummary = '';
     }
 
-    if (this.drawer) {
-      this.drawer.fromJSON(nextLayout);
-      this.applyDrawerVisualState();
-      this.drawer.zoomToFit();
-      this.captureDrawerState();
-      this.updateMinimap();
+    const previousSuppression = this.suppressDraftPersistence;
+    this.suppressDraftPersistence = !persistDraft;
+    try {
+      this.persistDraftState();
+
+      if (this.drawer) {
+        this.drawer.fromJSON(nextLayout);
+        this.applyDrawerVisualState();
+        this.drawer.zoomToFit();
+        this.captureDrawerState();
+        this.updateMinimap();
+      }
+    } finally {
+      this.suppressDraftPersistence = previousSuppression;
     }
   }
 
@@ -1644,6 +1846,24 @@ export class WarehouseOptimizeDesignComponent implements AfterViewInit {
     }
 
     this.syncSelectionFromDrawer();
+    this.persistDraftState();
+  }
+
+  private persistDraftState(): void {
+    if (this.suppressDraftPersistence) {
+      return;
+    }
+    this.state.setDesignDraft({
+      profileId: this.selectedProfileId,
+      profileName: this.profileName.trim() || 'Main Shared Layout',
+      description: this.description.trim(),
+      warehouseWidth: this.layout.warehouseWidth,
+      warehouseHeight: this.layout.warehouseHeight,
+      layout: this.pendingLayoutData
+    });
+    if (!this.isSaving) {
+      this.setSaveStatus('dirty', 'Unsaved changes');
+    }
   }
 
   private syncSelectionFromDrawer(): void {
@@ -1867,6 +2087,44 @@ export class WarehouseOptimizeDesignComponent implements AfterViewInit {
       startX: 10,
       startY: 10
     };
+  }
+
+  private setSaveStatus(state: SaveState, text: string): void {
+    this.saveState = state;
+    this.saveStatusText = text;
+  }
+
+  private savedMessage(updatedAt: string | null | undefined): string {
+    if (!updatedAt) {
+      return 'Saved';
+    }
+
+    const parsed = new Date(updatedAt);
+    if (Number.isNaN(parsed.getTime())) {
+      return 'Saved';
+    }
+
+    return `Saved ${parsed.toLocaleTimeString('en-US', {
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: false
+    })}`;
+  }
+
+  private saveErrorMessage(error: unknown): string {
+    const apiMessages = (error as { error?: { messages?: Array<{ message?: string }> } })?.error?.messages;
+    const apiMessage = apiMessages?.find(message => !!message?.message)?.message;
+    if (apiMessage) {
+      return apiMessage;
+    }
+
+    const directMessage = (error as { error?: { message?: string } })?.error?.message;
+    if (directMessage) {
+      return directMessage;
+    }
+
+    return 'Could not save this layout. Please try again.';
   }
 }
 

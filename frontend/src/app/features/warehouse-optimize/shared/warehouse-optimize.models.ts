@@ -73,6 +73,15 @@ export interface WarehouseProfileDetail extends WarehouseProfileSummary {
   locations: WarehouseLayoutLocation[];
 }
 
+export interface WarehouseDesignDraft {
+  profileId: number | null;
+  profileName: string;
+  description: string;
+  warehouseWidth: number;
+  warehouseHeight: number;
+  layout: WarehouseDesignerLayout;
+}
+
 export interface ProductRecord {
   id?: number;
   sku: string;

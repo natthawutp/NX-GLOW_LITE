@@ -2,6 +2,12 @@
 
 Enterprise Warehouse Management System with modern UI/UX.
 
+## Development Guidance
+
+Project-specific implementation instructions for humans and AI agents live in [AGENTS.md](AGENTS.md).
+
+Important standing rule: every user-triggered action must show clear in-progress, success, and failure feedback, and must guard against duplicate submissions while it is running.
+
 # Top Tier 1 WMS Platforms (2026 Meta)
 Manhattan Active WM: Recognized for its cloud-native architecture and AI-driven automation for complex fulfillment.
 <b>Blue Yonder Warehouse Management</b>: AI-powered solution, highly regarded for 3PL and dynamic order management.

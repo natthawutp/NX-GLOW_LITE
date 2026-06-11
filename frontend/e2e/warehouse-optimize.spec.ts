@@ -60,13 +60,15 @@ test('admin can enter BKK/TESA and use Warehouse Optimize screens', async ({ pag
   const pixelAfter = await sampleCanvasPixel(designerCanvas, 200, 180);
 
   expect(pixelAfter).not.toEqual(pixelBefore);
-  await page.getByRole('button', { name: /save layout/i }).click();
-  await page.waitForTimeout(1500);
 
   await page.goto('/warehouse-optimize/view-2d');
   await expect(page.getByRole('heading', { name: /2d result/i })).toBeVisible();
   await expect(page.getByText(/no warehouse layout loaded/i)).not.toBeVisible({ timeout: 30000 });
   await expect(page.locator('svg.layout-svg')).toBeVisible({ timeout: 30000 });
+
+  await page.goto('/warehouse-optimize/design');
+  await page.getByRole('button', { name: /save layout/i }).click();
+  await page.waitForTimeout(1500);
 
   await page.goto('/warehouse-optimize/slotting');
   await expect(page.getByRole('heading', { name: /slotting/i })).toBeVisible();

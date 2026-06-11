@@ -258,6 +258,16 @@ export class WarehouseOptimizeView3dComponent implements OnDestroy {
     this.state.initialize();
 
     effect(() => {
+      const draft = this.state.designDraft();
+      if (draft) {
+        this.selectedProfileId = draft.profileId;
+        this.layout = normalizeLayout(draft.layout);
+        this.stopPolling();
+        this.snapshot = null;
+        this.liveStates = [];
+        return;
+      }
+
       const profile = this.state.selectedProfile();
       if (!profile) {
         return;

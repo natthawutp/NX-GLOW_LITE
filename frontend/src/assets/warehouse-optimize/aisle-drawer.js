@@ -203,6 +203,36 @@ class AisleDrawer {
         });
     }
 
+    getCanvasScreenPoint(e) {
+        const rect = this.canvas.getBoundingClientRect();
+        const scaleX = rect.width > 0 ? this.canvas.width / rect.width : 1;
+        const scaleY = rect.height > 0 ? this.canvas.height / rect.height : 1;
+        const cssX = e.clientX - rect.left;
+        const cssY = e.clientY - rect.top;
+
+        return {
+            rect,
+            cssX,
+            cssY,
+            screenX: cssX * scaleX,
+            screenY: cssY * scaleY
+        };
+    }
+
+    getPointerCoords(e) {
+        const point = this.getCanvasScreenPoint(e);
+        const coords = this.screenToWarehouse(point.screenX, point.screenY);
+        const snappedX = this.snapToGrid ? Math.round(coords.x / this.gridSize) * this.gridSize : coords.x;
+        const snappedY = this.snapToGrid ? Math.round(coords.y / this.gridSize) * this.gridSize : coords.y;
+
+        return {
+            ...point,
+            coords,
+            snappedX,
+            snappedY
+        };
+    }
+
     /**
      * Handle click to copy location name
      */
@@ -212,10 +242,8 @@ class AisleDrawer {
         // Only handle left click
         if (e.button !== 0) return;
 
-        const rect = this.canvas.getBoundingClientRect();
-        const screenX = e.clientX - rect.left;
-        const screenY = e.clientY - rect.top;
-        const coords = this.screenToWarehouse(screenX, screenY);
+        const point = this.getCanvasScreenPoint(e);
+        const coords = this.screenToWarehouse(point.screenX, point.screenY);
 
         // Find location at click position
         const location = this.findLocationAt(coords.x, coords.y);
@@ -412,12 +440,15 @@ class AisleDrawer {
         this.zoom = Math.max(this.minZoom, Math.min(this.maxZoom, newZoom));
         this.scale = this.baseScale * this.zoom;
 
-        // Zoom towards center point
-        if (centerX !== null && centerY !== null) {
-            const zoomRatio = this.zoom / oldZoom;
-            this.panX = centerX - (centerX - this.panX) * zoomRatio;
-            this.panY = centerY - (centerY - this.panY) * zoomRatio;
+        if (centerX === null || centerY === null) {
+            centerX = this.canvas.width / 2;
+            centerY = this.canvas.height / 2;
         }
+
+        // Zoom towards center point
+        const zoomRatio = this.zoom / oldZoom;
+        this.panX = centerX - (centerX - this.panX) * zoomRatio;
+        this.panY = centerY - (centerY - this.panY) * zoomRatio;
 
         if (this.onZoomChanged) {
             this.onZoomChanged(Math.round(this.zoom * 100));
@@ -477,12 +508,10 @@ class AisleDrawer {
 
     handleWheel(e) {
         e.preventDefault();
-        const rect = this.canvas.getBoundingClientRect();
-        const mouseX = e.clientX - rect.left;
-        const mouseY = e.clientY - rect.top;
+        const point = this.getCanvasScreenPoint(e);
 
         const zoomFactor = e.deltaY > 0 ? 0.9 : 1.1;
-        this.setZoom(this.zoom * zoomFactor, mouseX, mouseY);
+        this.setZoom(this.zoom * zoomFactor, point.screenX, point.screenY);
     }
 
     handleMouseDown(e) {
@@ -492,10 +521,8 @@ class AisleDrawer {
             return;
         }
 
-        const rect = this.canvas.getBoundingClientRect();
-        const screenX = e.clientX - rect.left;
-        const screenY = e.clientY - rect.top;
-        const coords = this.screenToWarehouse(screenX, screenY);
+        const pointer = this.getPointerCoords(e);
+        const coords = pointer.coords;
 
         // Middle mouse button or Space+Click for panning
         if (e.button === 1 || (e.button === 0 && (this.isSpacePressed || e.getModifierState?.('Space')))) {
@@ -507,21 +534,18 @@ class AisleDrawer {
         }
 
         // Snap to grid
-        const snappedX = this.snapToGrid ? Math.round(coords.x / this.gridSize) * this.gridSize : coords.x;
-        const snappedY = this.snapToGrid ? Math.round(coords.y / this.gridSize) * this.gridSize : coords.y;
-
         if (this._mode === 'draw') {
-            this.startDrawing(snappedX, snappedY);
+            this.startDrawing(coords.x, coords.y);
         } else if (this._mode === 'boundary') {
-            this.addBoundaryPoint(snappedX, snappedY);
+            this.addBoundaryPoint(coords.x, coords.y);
         } else if (this._mode === 'select') {
             this.selectAisleAt(coords.x, coords.y, e.ctrlKey || e.metaKey || e.shiftKey);
         } else if (this._mode === 'delete') {
             this.deleteAisleAt(coords.x, coords.y);
         } else if (this._mode === 'measure') {
             if (!this.isMeasuring) {
-                this.measureStart = { x: snappedX, y: snappedY };
-                this.measureEnd = { x: snappedX, y: snappedY };
+                this.measureStart = { x: coords.x, y: coords.y };
+                this.measureEnd = { x: coords.x, y: coords.y };
                 this.isMeasuring = true;
             }
         } else if (this._mode === 'move') {
@@ -536,8 +560,8 @@ class AisleDrawer {
                     this.movingAisles = [...this.selectedAisles];
                     this.moveOffsets = this.movingAisles.map(a => ({
                         aisle: a,
-                        offsetX: snappedX - a.x,
-                        offsetY: snappedY - a.y
+                        offsetX: pointer.snappedX - a.x,
+                        offsetY: pointer.snappedY - a.y
                     }));
                 } else {
                     // Single aisle move - add to selection if using modifier keys
@@ -550,14 +574,14 @@ class AisleDrawer {
                         this.selectedAisles = [aisle];
                     }
                     this.movingAisles = [aisle];
-                    this.moveOffsets = [{ aisle, offsetX: snappedX - aisle.x, offsetY: snappedY - aisle.y }];
+                    this.moveOffsets = [{ aisle, offsetX: pointer.snappedX - aisle.x, offsetY: pointer.snappedY - aisle.y }];
                 }
 
                 this.movingAisle = aisle;
                 this.selectedAisle = aisle;
                 this.isMoving = true;
-                this.moveStartX = snappedX - aisle.x;
-                this.moveStartY = snappedY - aisle.y;
+                this.moveStartX = pointer.snappedX - aisle.x;
+                this.moveStartY = pointer.snappedY - aisle.y;
                 this.canvas.classList.add('moving');
                 this.render();
             }
@@ -565,10 +589,8 @@ class AisleDrawer {
     }
 
     handleMouseMove(e) {
-        const rect = this.canvas.getBoundingClientRect();
-        const screenX = e.clientX - rect.left;
-        const screenY = e.clientY - rect.top;
-        const coords = this.screenToWarehouse(screenX, screenY);
+        const pointer = this.getPointerCoords(e);
+        const coords = pointer.coords;
 
         // Update coordinates display
         if (this.onCoordinatesChanged) {
@@ -615,25 +637,21 @@ class AisleDrawer {
 
         // Check for hovered location
         if (this.showLocations) {
-            this.updateHoveredLocation(coords.x, coords.y, screenX, screenY);
+            this.updateHoveredLocation(coords.x, coords.y, pointer.cssX, pointer.cssY);
         }
 
-        // Snap to grid
-        const snappedX = this.snapToGrid ? Math.round(coords.x / this.gridSize) * this.gridSize : coords.x;
-        const snappedY = this.snapToGrid ? Math.round(coords.y / this.gridSize) * this.gridSize : coords.y;
-
         if (this._mode === 'boundary' && this.boundaryDraftPoints.length > 0) {
-            this.boundaryHoverPoint = { x: snappedX, y: snappedY };
+            this.boundaryHoverPoint = { x: coords.x, y: coords.y };
             this.render();
             return;
         }
 
-        this.currentX = snappedX;
-        this.currentY = snappedY;
+        this.currentX = coords.x;
+        this.currentY = coords.y;
 
         if (this.isDrawing || this.isMeasuring) {
             if (this.isMeasuring) {
-                this.measureEnd = { x: snappedX, y: snappedY };
+                this.measureEnd = { x: coords.x, y: coords.y };
             }
             this.render();
         }

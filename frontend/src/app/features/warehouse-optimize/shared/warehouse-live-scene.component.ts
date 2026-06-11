@@ -217,7 +217,7 @@ export class WarehouseLiveSceneComponent implements AfterViewInit, OnChanges, On
       mesh.position.set(
         (location.x ?? 0) + (this.meshWidth(location) / 2),
         this.yLevel(location),
-        (location.y ?? 0) + (this.meshDepth(location) / 2)
+        this.sceneZ(location)
       );
       mesh.userData = { location: location.location };
       this.layoutGroup.add(mesh);
@@ -331,5 +331,12 @@ export class WarehouseLiveSceneComponent implements AfterViewInit, OnChanges, On
 
   private yLevel(location: WarehouseLayoutLocation): number {
     return ((location.level ?? 1) - 1) * 0.9 + (this.meshHeight(location) / 2) + 0.08;
+  }
+
+  private sceneZ(location: WarehouseLayoutLocation): number {
+    if (!this.layout) {
+      return this.meshDepth(location) / 2;
+    }
+    return this.layout.warehouseHeight - (location.y ?? 0) - (this.meshDepth(location) / 2);
   }
 }
