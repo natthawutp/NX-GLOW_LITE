@@ -47,6 +47,13 @@ public final class WarehouseOptimizeRequests {
         public void setOptions(Map<String, Object> options) { this.options = options; }
     }
 
+    public static class AutoGenerateLayoutRequest {
+        private Map<String, Object> options;
+
+        public Map<String, Object> getOptions() { return options; }
+        public void setOptions(Map<String, Object> options) { this.options = options; }
+    }
+
     public static class UploadProductsRequest {
         @NotEmpty
         private List<Map<String, Object>> products = new ArrayList<>();
@@ -137,19 +144,32 @@ public final class WarehouseOptimizeRequests {
 
     public static class ViewerSyncRequest {
         private String customerCode;
+        private Object layoutData;
 
         public String getCustomerCode() { return customerCode; }
         public void setCustomerCode(String customerCode) { this.customerCode = customerCode; }
+        public Object getLayoutData() { return layoutData; }
+        public void setLayoutData(Object layoutData) { this.layoutData = layoutData; }
     }
 
     public static class ViewerDeltaRequest {
         private String customerCode;
         private LocalDateTime cursor;
+        private Object layoutData;
 
         public String getCustomerCode() { return customerCode; }
         public void setCustomerCode(String customerCode) { this.customerCode = customerCode; }
         public LocalDateTime getCursor() { return cursor; }
         public void setCursor(LocalDateTime cursor) { this.cursor = cursor; }
+        public Object getLayoutData() { return layoutData; }
+        public void setLayoutData(Object layoutData) { this.layoutData = layoutData; }
+    }
+
+    public static class WorkingStatusSnapshotRequest {
+        private String customerCode;
+
+        public String getCustomerCode() { return customerCode; }
+        public void setCustomerCode(String customerCode) { this.customerCode = customerCode; }
     }
 
     public static class LegacyProfileRequest {

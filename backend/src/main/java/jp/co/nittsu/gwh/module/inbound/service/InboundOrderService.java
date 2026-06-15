@@ -109,7 +109,7 @@ public class InboundOrderService {
         Map<String, LabelCandidate> bestByCode = new HashMap<>();
         try {
             String sql = "SELECT STS_CPNY_COD, STS_WHS_COD, STS_CUST_COD, STS_COD, STS_BSNS_COD, STS_LBL_COD, STS_RMKS " +
-                    "FROM SGWH0001.GWH_TM_STS " +
+                    "FROM GWH.GWH_TM_STS " +
                     "WHERE STS_CPNY_COD IN (:cpny, '000000000000', '*') " +
                     "AND STS_WHS_COD IN (:whs, '00000000', '*') " +
                     "AND STS_CUST_COD IN (:cust, '00000000000000000000000000', '*') " +

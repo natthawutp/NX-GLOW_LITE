@@ -245,6 +245,10 @@ function normalizeAisle(aisleRaw: Record<string, unknown>, fallbackId: number): 
     height,
     type,
     direction: aisleRaw['direction'] ? String(aisleRaw['direction']) : 'AUTO',
+    workingStatusFlow: aisleRaw['workingStatusFlow'] ? String(aisleRaw['workingStatusFlow']).toUpperCase() : null,
+    workingStatusCode: aisleRaw['workingStatusCode'] ? String(aisleRaw['workingStatusCode']) : null,
+    workingStatusLabel: aisleRaw['workingStatusLabel'] ? String(aisleRaw['workingStatusLabel']) : null,
+    workingStatusColor: aisleRaw['workingStatusColor'] ? String(aisleRaw['workingStatusColor']) : null,
     levels,
     zone,
     bayWidth,
@@ -266,6 +270,8 @@ function normalizeLocation(
   zone: string,
   type: string
 ): WarehouseLayoutLocation {
+  const hasExplicitSide = Object.prototype.hasOwnProperty.call(locationRaw, 'side');
+  const rawSide = hasExplicitSide ? locationRaw['side'] : undefined;
   return {
     location: String(locationRaw['location'] ?? `${zone}-${String(fallbackPosition).padStart(3, '0')}`),
     zone: String(locationRaw['zone'] ?? zone),
@@ -273,7 +279,7 @@ function normalizeLocation(
     level: clampInt(locationRaw['level'], 1, 12, 1),
     aisle: clampInt(locationRaw['aisle'], 1, 9999, 1),
     position: clampInt(locationRaw['position'], 1, 99999, fallbackPosition),
-    side: locationRaw['side'] ? String(locationRaw['side']) : 'L',
+    side: rawSide === null ? null : (rawSide ? String(rawSide) : 'L'),
     x: toNumber(locationRaw['x'], 0),
     y: toNumber(locationRaw['y'], 0),
     slottedClass: locationRaw['slottedClass'] ? String(locationRaw['slottedClass']) : null,

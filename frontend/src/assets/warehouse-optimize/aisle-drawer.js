@@ -87,6 +87,7 @@ class AisleDrawer {
         this.isSpacePressed = false;
         this.lastPanX = 0;
         this.lastPanY = 0;
+        this.lastRotateAt = 0;
 
         // Measurement
         this.measureStart = null;
@@ -105,6 +106,7 @@ class AisleDrawer {
             'DRIVE_IN': '#9b59b6',
             'FLOOR': '#f39c12',
             'STAGING': '#1abc9c',
+            'WORKING_STATUS': '#0ea5e9',
             'EMPTY_FLOOR': '#ecf0f1',
             'WALKWAY': '#3498db',
             'OBSTACLE': '#7f8c8d',
@@ -510,8 +512,46 @@ class AisleDrawer {
         e.preventDefault();
         const point = this.getCanvasScreenPoint(e);
 
+        if (
+            this._mode === 'move' &&
+            this.selectedAisles.length > 0 &&
+            !e.ctrlKey &&
+            !e.metaKey &&
+            !e.altKey
+        ) {
+            const now = Date.now();
+            if (now - this.lastRotateAt < 140) {
+                return;
+            }
+            this.lastRotateAt = now;
+            this.rotateSelectedAisles();
+            return;
+        }
+
         const zoomFactor = e.deltaY > 0 ? 0.9 : 1.1;
         this.setZoom(this.zoom * zoomFactor, point.screenX, point.screenY);
+    }
+
+    rotateSelectedAisles() {
+        if (!this.selectedAisles.length) {
+            return;
+        }
+
+        this.selectedAisles.forEach(aisle => aisle.rotate(this.warehouseWidth, this.warehouseHeight));
+        this.applyConstraintFiltering();
+        this.saveState();
+
+        if (this.onAisleSelected && this.selectedAisle) {
+            this.onAisleSelected(this.selectedAisle);
+        }
+        if (this.onMultipleAislesSelected && this.selectedAisles.length > 1) {
+            this.onMultipleAislesSelected(this.selectedAisles);
+        }
+        if (this.onAislesChanged) {
+            this.onAislesChanged();
+        }
+
+        this.render();
     }
 
     handleMouseDown(e) {
@@ -854,6 +894,7 @@ class AisleDrawer {
             aisle.bayWidth = aisleData.bayWidth;
             aisle.bayDepth = aisleData.bayDepth;
             aisle.aisleWidth = aisleData.aisleWidth;
+            aisle.direction = aisleData.direction || 'AUTO';
             aisle.tunnelLevelFrom = aisleData.tunnelLevelFrom || 1;
             aisle.tunnelLevelTo = aisleData.tunnelLevelTo || aisleData.levels || 1;
             aisle.tunnelRules = [];
@@ -1048,6 +1089,82 @@ class AisleDrawer {
         return true;
     }
 
+    resizeWarehouseBounds(nextWidth, nextHeight) {
+        const width = Math.max(10, Number(nextWidth) || this.warehouseWidth);
+        const height = Math.max(10, Number(nextHeight) || this.warehouseHeight);
+
+        this.warehouseWidth = width;
+        this.warehouseHeight = height;
+
+        let movedAisles = 0;
+        let resizedAisles = 0;
+        let adjustedBoundaryPoints = 0;
+
+        for (const aisle of this.aisles) {
+            let changed = false;
+            let resized = false;
+
+            if (aisle.width > width) {
+                aisle.width = width;
+                resized = true;
+                changed = true;
+            }
+
+            if (aisle.height > height) {
+                aisle.height = height;
+                resized = true;
+                changed = true;
+            }
+
+            const maxX = Math.max(0, width - aisle.width);
+            const maxY = Math.max(0, height - aisle.height);
+            const clampedX = Math.max(0, Math.min(maxX, aisle.x));
+            const clampedY = Math.max(0, Math.min(maxY, aisle.y));
+
+            if (clampedX !== aisle.x || clampedY !== aisle.y) {
+                aisle.x = clampedX;
+                aisle.y = clampedY;
+                movedAisles += 1;
+                changed = true;
+            }
+
+            if (changed) {
+                if (resized) {
+                    resizedAisles += 1;
+                }
+                aisle.generateLocations();
+            }
+        }
+
+        if (this.hasBoundary()) {
+            this.boundaryPolygon = this.boundaryPolygon.map(point => {
+                const clampedPoint = {
+                    x: Math.max(0, Math.min(width, point.x)),
+                    y: Math.max(0, Math.min(height, point.y))
+                };
+                if (clampedPoint.x !== point.x || clampedPoint.y !== point.y) {
+                    adjustedBoundaryPoints += 1;
+                }
+                return clampedPoint;
+            });
+        }
+
+        this.applyConstraintFiltering();
+        this.setupCanvas();
+        this.saveState();
+
+        if (this.onAislesChanged) {
+            this.onAislesChanged();
+        }
+
+        this.render();
+        return {
+            movedAisles,
+            resizedAisles,
+            adjustedBoundaryPoints
+        };
+    }
+
     distancePointToSegment(point, start, end) {
         const dx = end.x - start.x;
         const dy = end.y - start.y;
@@ -1179,8 +1296,16 @@ class AisleDrawer {
         newAisle.bayWidth = aisle.bayWidth;
         newAisle.bayDepth = aisle.bayDepth;
         newAisle.aisleWidth = aisle.aisleWidth;
+        newAisle.direction = aisle.direction || 'AUTO';
+        newAisle.pickFaceLevels = Array.isArray(aisle.pickFaceLevels) ? [...aisle.pickFaceLevels] : undefined;
+        newAisle.startPointX = aisle.startPointX;
+        newAisle.startPointY = aisle.startPointY;
         newAisle.tunnelLevelFrom = aisle.tunnelLevelFrom || 1;
         newAisle.tunnelLevelTo = aisle.tunnelLevelTo || aisle.levels || 1;
+        newAisle.workingStatusFlow = aisle.workingStatusFlow || null;
+        newAisle.workingStatusCode = aisle.workingStatusCode || null;
+        newAisle.workingStatusLabel = aisle.workingStatusLabel || null;
+        newAisle.workingStatusColor = aisle.workingStatusColor || null;
         newAisle.tunnelRules = [];
         newAisle.generateLocations();
 
@@ -1616,7 +1741,9 @@ class AisleDrawer {
             return;
         }
 
-        this.ctx.fillStyle = this.colors[aisle.type] || this.colors['HIGH_RACK'];
+        this.ctx.fillStyle = aisle.type === 'WORKING_STATUS'
+            ? (aisle.workingStatusColor || this.colors[aisle.type] || this.colors['HIGH_RACK'])
+            : (this.colors[aisle.type] || this.colors['HIGH_RACK']);
         this.ctx.globalAlpha = isSelected ? 0.8 : 0.5;
         this.ctx.fillRect(aisle.x, aisle.y, aisle.width, aisle.height);
 
@@ -1641,7 +1768,9 @@ class AisleDrawer {
         );
 
         this.drawFlippedText(
-            `${aisle.locations.length} locations`,
+            aisle.type === 'WORKING_STATUS'
+                ? (aisle.workingStatusLabel || 'Working Status')
+                : `${aisle.locations.length} locations`,
             centerX,
             centerY - 15 / this.scale,
             {
@@ -2202,7 +2331,9 @@ class AisleDrawer {
             `Mode: ${modeText} | Zoom: ${Math.round(this.zoom * 100)}%${selectionInfo}`,
             this._mode === 'boundary'
                 ? 'Click to add points | Click near first point or press Enter to close | Delete clears boundary'
-                : 'Ctrl+Click: Multi-select | Ctrl+A: Select all | Scroll: Zoom | Middle-click/Space+drag: Pan'
+                : this._mode === 'move' && this.selectedAisles.length > 0
+                    ? 'Scroll: Rotate selection | Ctrl+Scroll: Zoom | Ctrl+Click: Multi-select | Middle-click/Space+drag: Pan'
+                    : 'Ctrl+Click: Multi-select | Ctrl+A: Select all | Scroll: Zoom | Middle-click/Space+drag: Pan'
         ];
 
         instructions.forEach((instruction, index) => {
@@ -2224,13 +2355,20 @@ class AisleDrawer {
                 height: a.height,
                 type: a.type,
                 direction: a.direction || 'AUTO',
+                workingStatusFlow: a.workingStatusFlow || null,
+                workingStatusCode: a.workingStatusCode || null,
+                workingStatusLabel: a.workingStatusLabel || null,
+                workingStatusColor: a.workingStatusColor || null,
                 levels: a.levels,
                 zone: a.zone,
                 bayWidth: a.bayWidth,
                 bayDepth: a.bayDepth,
                 aisleWidth: a.aisleWidth,
+                pickFaceLevels: a.pickFaceLevels || null,
                 tunnelLevelFrom: a.tunnelLevelFrom || 1,
                 tunnelLevelTo: a.tunnelLevelTo || a.levels || 1,
+                startPointX: a.startPointX,
+                startPointY: a.startPointY,
                 baseLocations: a.baseLocations || a.locations,
                 locations: a.locations
             }))
@@ -2244,11 +2382,18 @@ class AisleDrawer {
         this.aisles = data.aisles.map(a => {
             const aisle = new Aisle(a.id, a.x, a.y, a.width, a.height, a.type, a.levels, a.zone);
             aisle.direction = a.direction || 'AUTO';
+            aisle.workingStatusFlow = a.workingStatusFlow || null;
+            aisle.workingStatusCode = a.workingStatusCode || null;
+            aisle.workingStatusLabel = a.workingStatusLabel || null;
+            aisle.workingStatusColor = a.workingStatusColor || null;
             aisle.bayWidth = a.bayWidth;
             aisle.bayDepth = a.bayDepth;
             aisle.aisleWidth = a.aisleWidth;
+            aisle.pickFaceLevels = Array.isArray(a.pickFaceLevels) ? [...a.pickFaceLevels] : undefined;
             aisle.tunnelLevelFrom = a.tunnelLevelFrom || 1;
             aisle.tunnelLevelTo = a.tunnelLevelTo || a.levels || 1;
+            aisle.startPointX = a.startPointX;
+            aisle.startPointY = a.startPointY;
             aisle.tunnelRules = [];
             aisle.baseLocations = a.baseLocations || a.locations || [];
             aisle.locations = a.locations || [];
@@ -2404,6 +2549,17 @@ class Aisle {
         this.tunnelLevelTo = Math.max(1, levels || 1);
         this.tunnelRules = [];
         this.baseLocations = [];
+        this.workingStatusFlow = null;
+        this.workingStatusCode = null;
+        this.workingStatusLabel = null;
+        this.workingStatusColor = null;
+
+        if (this.type === 'WORKING_STATUS') {
+            this.workingStatusFlow = 'OUTBOUND';
+            this.workingStatusCode = '300';
+            this.workingStatusLabel = 'Allocated';
+            this.workingStatusColor = '#1A005D';
+        }
     }
 
     getDefaultDimensions() {
@@ -2413,6 +2569,7 @@ class Aisle {
             'DRIVE_IN': { width: 1.2, depth: 1.2, aisleWidth: 0 },
             'FLOOR': { width: 1.2, depth: 1.0, aisleWidth: 1.5 },      // Min 1.5m aisle for walking
             'STAGING': { width: 1.2, depth: 1.0, aisleWidth: 2.0 },     // Wider aisle for staging operations
+            'WORKING_STATUS': { width: 1.2, depth: 1.0, aisleWidth: 0 },
             'DOCK_DOOR': { width: 3.2, depth: 1.4, aisleWidth: 0 }
         };
         return defaults[this.type] || defaults['HIGH_RACK'];
@@ -2533,7 +2690,13 @@ class Aisle {
     updateProperties(props) {
         if (props.zone !== undefined) this.zone = props.zone;
         if (props.type !== undefined) this.type = props.type;
-        if (props.direction !== undefined) this.direction = props.direction;
+        if (props.direction !== undefined) {
+            const desiredDirection = String(props.direction || 'AUTO').toUpperCase();
+            if (desiredDirection !== 'AUTO' && desiredDirection !== this.getResolvedDirection()) {
+                this.rotate();
+            }
+            this.direction = desiredDirection;
+        }
         if (props.levels !== undefined) this.levels = props.levels;
         if (props.bayWidth !== undefined) this.bayWidth = props.bayWidth;
         if (props.bayDepth !== undefined) this.bayDepth = props.bayDepth;
@@ -2541,6 +2704,10 @@ class Aisle {
         if (props.pickFaceLevels !== undefined) this.pickFaceLevels = props.pickFaceLevels;
         if (props.startPointX !== undefined) this.startPointX = props.startPointX;
         if (props.startPointY !== undefined) this.startPointY = props.startPointY;
+        if (props.workingStatusFlow !== undefined) this.workingStatusFlow = props.workingStatusFlow;
+        if (props.workingStatusCode !== undefined) this.workingStatusCode = props.workingStatusCode;
+        if (props.workingStatusLabel !== undefined) this.workingStatusLabel = props.workingStatusLabel;
+        if (props.workingStatusColor !== undefined) this.workingStatusColor = props.workingStatusColor;
         if (props.tunnelLevelFrom !== undefined) this.tunnelLevelFrom = props.tunnelLevelFrom;
         if (props.tunnelLevelTo !== undefined) this.tunnelLevelTo = props.tunnelLevelTo;
         this.tunnelRules = [];
@@ -2552,6 +2719,44 @@ class Aisle {
         if (this.type === 'TUNNEL_ZONE') {
             this.levels = Math.max(Number(this.levels || 1), this.tunnelLevelTo);
         }
+        if (this.type === 'WORKING_STATUS' && !this.workingStatusCode) {
+            this.workingStatusFlow = this.workingStatusFlow || 'OUTBOUND';
+            this.workingStatusCode = '300';
+            this.workingStatusLabel = this.workingStatusLabel || 'Allocated';
+            this.workingStatusColor = this.workingStatusColor || '#1A005D';
+        }
+
+        this.generateLocations();
+    }
+
+    getResolvedDirection() {
+        if (this.direction === 'HORIZONTAL' || this.direction === 'VERTICAL') {
+            return this.direction;
+        }
+        return this.height >= this.width ? 'VERTICAL' : 'HORIZONTAL';
+    }
+
+    rotate(boundsWidth = null, boundsHeight = null) {
+        const currentDirection = this.getResolvedDirection();
+        const centerX = this.x + (this.width / 2);
+        const centerY = this.y + (this.height / 2);
+        const nextWidth = this.height;
+        const nextHeight = this.width;
+
+        this.width = nextWidth;
+        this.height = nextHeight;
+        this.x = centerX - (nextWidth / 2);
+        this.y = centerY - (nextHeight / 2);
+
+        if (Number.isFinite(boundsWidth) && Number.isFinite(boundsHeight)) {
+            this.x = Math.max(0, Math.min(boundsWidth - this.width, this.x));
+            this.y = Math.max(0, Math.min(boundsHeight - this.height, this.y));
+        }
+
+        this.direction = currentDirection === 'VERTICAL' ? 'HORIZONTAL' : 'VERTICAL';
+
+        if (this.startPointX !== undefined) this.startPointX = this.x;
+        if (this.startPointY !== undefined) this.startPointY = this.y;
 
         this.generateLocations();
     }
@@ -2567,6 +2772,7 @@ class Aisle {
         if (
             this.type === 'EMPTY_FLOOR' ||
             this.type === 'WALKWAY' ||
+            this.type === 'WORKING_STATUS' ||
             this.type === 'OBSTACLE' ||
             this.type === 'PILLAR' ||
             this.type === 'TUNNEL_ZONE' ||

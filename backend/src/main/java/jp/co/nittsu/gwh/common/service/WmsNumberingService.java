@@ -1,5 +1,6 @@
 package jp.co.nittsu.gwh.common.service;
 
+import jp.co.nittsu.gwh.config.OracleObjectNameResolver;
 import jp.co.nittsu.gwh.common.exception.WmsBusinessException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -50,20 +51,25 @@ public class WmsNumberingService {
 
     // ── SQL ───────────────────────────────────────────────────────────────────
 
-    /** 4-tier tenant-fallback SELECT with pessimistic row lock. */
-    private static final String SELECT_FOR_UPDATE =
-        "SELECT NUM_CPNY_COD, NUM_WHS_COD, NUM_CUST_COD, " +
-        "       NUM_PRFX, NUM_STR_NUM, NUM_END_NUM, NUM_CUR_NUM, NUM_TYP, NUM_NLOP_FLG " +
-        "FROM SGWH0001.GWH_TM_NUM " +
-        "WHERE TRIM(NUM_CPNY_COD) = ? AND TRIM(NUM_WHS_COD) = ? AND TRIM(NUM_CUST_COD) = ? " +
-        "  AND TRIM(NUM_COD) = ? AND TRIM(DEL_FLG) = '0' " +
-        "FOR UPDATE WAIT 1";
+    private final String selectForUpdate;
+    private final String updateCurNum;
 
-    private static final String UPDATE_CUR_NUM =
-        "UPDATE SGWH0001.GWH_TM_NUM " +
-        "SET NUM_CUR_NUM = ?, UPD_YMDHMS = SYSTIMESTAMP " +
-        "WHERE TRIM(NUM_CPNY_COD) = ? AND TRIM(NUM_WHS_COD) = ? AND TRIM(NUM_CUST_COD) = ? " +
-        "  AND TRIM(NUM_COD) = ? AND TRIM(DEL_FLG) = '0'";
+    public WmsNumberingService(OracleObjectNameResolver oracleObjectNameResolver) {
+        String numberingTable = oracleObjectNameResolver.preferredCandidates("GWH_TM_NUM")[0];
+        this.selectForUpdate =
+            "SELECT NUM_CPNY_COD, NUM_WHS_COD, NUM_CUST_COD, " +
+            "       NUM_PRFX, NUM_STR_NUM, NUM_END_NUM, NUM_CUR_NUM, NUM_TYP, NUM_NLOP_FLG " +
+            "FROM " + numberingTable + " " +
+            "WHERE TRIM(NUM_CPNY_COD) = ? AND TRIM(NUM_WHS_COD) = ? AND TRIM(NUM_CUST_COD) = ? " +
+            "  AND TRIM(NUM_COD) = ? AND TRIM(DEL_FLG) = '0' " +
+            "FOR UPDATE WAIT 1";
+
+        this.updateCurNum =
+            "UPDATE " + numberingTable + " " +
+            "SET NUM_CUR_NUM = ?, UPD_YMDHMS = SYSTIMESTAMP " +
+            "WHERE TRIM(NUM_CPNY_COD) = ? AND TRIM(NUM_WHS_COD) = ? AND TRIM(NUM_CUST_COD) = ? " +
+            "  AND TRIM(NUM_COD) = ? AND TRIM(DEL_FLG) = '0'";
+    }
 
     // ── Public API ────────────────────────────────────────────────────────────
 
@@ -207,7 +213,7 @@ public class WmsNumberingService {
     private NumRow tryFetch(Connection conn,
                             String numCode,
                             String cpny, String whs, String cust) throws SQLException {
-        try (PreparedStatement ps = conn.prepareStatement(SELECT_FOR_UPDATE)) {
+        try (PreparedStatement ps = conn.prepareStatement(selectForUpdate)) {
             ps.setString(1, cpny);
             ps.setString(2, whs);
             ps.setString(3, cust);
@@ -248,7 +254,7 @@ public class WmsNumberingService {
                                 String numCode, String newNum) throws SQLException {
         log.debug("updateSequence: SET NUM_CUR_NUM='{}' WHERE cpny={} whs={} cust={} code={}",
                   newNum, cpny, whs, cust, numCode);
-        try (PreparedStatement ps = conn.prepareStatement(UPDATE_CUR_NUM)) {
+        try (PreparedStatement ps = conn.prepareStatement(updateCurNum)) {
             ps.setString(1, newNum);
             ps.setString(2, cpny);
             ps.setString(3, whs);

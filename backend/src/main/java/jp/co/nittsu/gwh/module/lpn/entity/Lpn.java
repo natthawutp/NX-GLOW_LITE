@@ -4,7 +4,7 @@ import jp.co.nittsu.gwh.common.entity.BaseEntity;
 import javax.persistence.*;
 
 @Entity
-@Table(name = "SGWH0001.GWH_TJ_LPN")
+@Table(name = "GWH.GWH_TJ_LPN")
 @IdClass(LpnId.class)
 public class Lpn extends BaseEntity {
 

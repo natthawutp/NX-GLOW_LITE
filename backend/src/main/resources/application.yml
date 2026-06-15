@@ -36,7 +36,7 @@ spring:
     properties:
       hibernate:
         format_sql: true
-        default_schema: GWH
+        default_schema: ${gwh.oracle.schema:SGWH1001}
 
   # ---------- Jackson ----------
   jackson:
@@ -73,6 +73,8 @@ server:
 
 # ---------- JWT Configuration ----------
 gwh:
+  oracle:
+    schema: ${GWH_ORACLE_SCHEMA:SGWH1001}
   jwt:
     secret: GwhModernWms2026SecureEnterpriseSecretKeyForJwtTokenGenerationAndValidationSystem
     access-token-expiration: 900000      # 15 minutes

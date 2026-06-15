@@ -27,10 +27,10 @@ public class InboundOrderRepository {
     private static final String[] INBOUND_SOURCE_CANDIDATES = {
             "VGWH_TJ_AV_H",
             "GWH.VGWH_TJ_AV_H",
-            "SGWH0001.VGWH_TJ_AV_H",
+            "GWH.VGWH_TJ_AV_H",
             "GWH_TJ_AV_H",
             "GWH.GWH_TJ_AV_H",
-            "SGWH0001.GWH_TJ_AV_H"
+            "GWH.GWH_TJ_AV_H"
     };
 
     @PersistenceContext
@@ -152,7 +152,7 @@ public class InboundOrderRepository {
         String sql =
             "SELECT h.AVH_AV_NUM, h.AVH_AV_STS, NVL(h.AVH_SPL_NAM1, h.AVH_SPL_COD), h.AVH_SPL_COD, " +
             "h.AVH_PO_NUM, h.AVH_TRN_KND, h.AVH_SCDL_YMD, h.AVH_ARV_YMD, h.AVH_RMKS " +
-            "FROM SGWH0001.GWH_TJ_AV_H h " +
+            "FROM GWH.GWH_TJ_AV_H h " +
             "WHERE h.AVH_CPNY_COD = :cpny AND h.AVH_WHS_COD = :whs AND h.AVH_CUST_COD = :cust " +
             "  AND h.AVH_AV_NUM = :avNum AND h.DEL_FLG = '0'";
 
@@ -280,8 +280,8 @@ public class InboundOrderRepository {
             "  h.AVH_WGT, h.AVH_M3, h.AVH_RMKS, " +
             "  TO_CHAR(h.UPD_YMDHMS, 'YYYY-MM-DD HH24:MI:SS.FF3'), " +
             "  t.TRN_NAM " +
-            "FROM SGWH0001.GWH_TJ_AV_H h " +
-            "LEFT JOIN SGWH0001.GWH_TM_TRN t ON t.TRN_CPNY_COD = h.AVH_CPNY_COD " +
+            "FROM GWH.GWH_TJ_AV_H h " +
+            "LEFT JOIN GWH.GWH_TM_TRN t ON t.TRN_CPNY_COD = h.AVH_CPNY_COD " +
             "  AND t.TRN_WHS_COD = h.AVH_WHS_COD AND t.TRN_CUST_COD = h.AVH_CUST_COD " +
             "  AND t.TRN_KND = h.AVH_TRN_KND AND t.DEL_FLG = '0' " +
             "WHERE h.AVH_CPNY_COD = :cpny AND h.AVH_WHS_COD = :whs " +
@@ -337,7 +337,7 @@ public class InboundOrderRepository {
             "  d.AVD_WGT, d.AVD_M3, d.AVD_SBIV_COD, " +
             "  d.AVD_PIK1, d.AVD_PIK2, d.AVD_PIK3, d.AVD_PIK4, " +
             "  d.AVD_PIK5, d.AVD_PIK6, d.AVD_PIK7, d.AVD_RMKS " +
-            "FROM SGWH0001.GWH_TJ_AV_D d " +
+            "FROM GWH.GWH_TJ_AV_D d " +
             "WHERE d.AVD_CPNY_COD = :cpny AND d.AVD_WHS_COD = :whs " +
             "  AND d.AVD_CUST_COD = :cust AND d.AVD_AV_NUM = :avNum AND d.DEL_FLG = '0' " +
             "ORDER BY d.AVD_AVLN_NUM ASC";
@@ -414,7 +414,7 @@ public class InboundOrderRepository {
             "  r.AVR_PROD_COD, r.AVR_RCS_QTY, r.AVR_RPC_QTY, r.AVR_RTPC_QTY, " +
             "  r.AVR_AREA_COD, r.AVR_RACK_COD, r.AVR_PSTN_COD, r.AVR_LVL_COD, " +
             "  r.AVR_DMG_FLG, r.AVR_RMKS " +
-            "FROM SGWH0001.GWH_TJ_AV_R r " +
+            "FROM GWH.GWH_TJ_AV_R r " +
             "WHERE r.AVR_CPNY_COD = :cpny AND r.AVR_WHS_COD = :whs " +
             "  AND r.AVR_CUST_COD = :cust AND r.AVR_AS_NUM = :avNum AND r.DEL_FLG = '0' " +
             "ORDER BY r.AVR_ASLN_NUM, r.AVR_ASSQ_NUM";
@@ -477,7 +477,7 @@ public class InboundOrderRepository {
             "SELECT l.LPN_NUM, l.LPN_TYPE, l.LPN_STS, l.LPN_LOC_COD, " +
             "  l.LPN_TTL_QTY, l.LPN_TTL_WGT, l.LPN_TTL_VOL, " +
             "  l.LPN_RCV_YMD, l.LPN_RMK " +
-            "FROM SGWH0001.GWH_TJ_LPN l " +
+            "FROM GWH.GWH_TJ_LPN l " +
             "WHERE l.LPN_CPNY_COD = :cpny AND l.LPN_WHS_COD = :whs " +
             "  AND l.LPN_CUST_COD = :cust AND l.LPN_AV_NUM = :avNum AND l.DEL_FLG = '0' " +
             "ORDER BY l.LPN_NUM";

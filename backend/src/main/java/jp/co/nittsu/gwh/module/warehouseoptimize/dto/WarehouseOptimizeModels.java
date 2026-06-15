@@ -96,6 +96,159 @@ public final class WarehouseOptimizeModels {
         public void setSlottedSku(String slottedSku) { this.slottedSku = slottedSku; }
     }
 
+    public static class WarehouseBoundaryPoint {
+        private BigDecimal x;
+        private BigDecimal y;
+
+        public BigDecimal getX() { return x; }
+        public void setX(BigDecimal x) { this.x = x; }
+        public BigDecimal getY() { return y; }
+        public void setY(BigDecimal y) { this.y = y; }
+    }
+
+    public static class WarehouseAisle {
+        private Integer id;
+        private BigDecimal x;
+        private BigDecimal y;
+        private BigDecimal width;
+        private BigDecimal height;
+        private String type;
+        private String direction;
+        private Integer levels;
+        private String zone;
+        private BigDecimal bayWidth;
+        private BigDecimal bayDepth;
+        private BigDecimal aisleWidth;
+        private Integer tunnelLevelFrom;
+        private Integer tunnelLevelTo;
+        private List<Integer> pickFaceLevels = new ArrayList<>();
+        private BigDecimal startPointX;
+        private BigDecimal startPointY;
+        private List<WarehouseLayoutLocation> baseLocations = new ArrayList<>();
+        private List<WarehouseLayoutLocation> locations = new ArrayList<>();
+
+        public Integer getId() { return id; }
+        public void setId(Integer id) { this.id = id; }
+        public BigDecimal getX() { return x; }
+        public void setX(BigDecimal x) { this.x = x; }
+        public BigDecimal getY() { return y; }
+        public void setY(BigDecimal y) { this.y = y; }
+        public BigDecimal getWidth() { return width; }
+        public void setWidth(BigDecimal width) { this.width = width; }
+        public BigDecimal getHeight() { return height; }
+        public void setHeight(BigDecimal height) { this.height = height; }
+        public String getType() { return type; }
+        public void setType(String type) { this.type = type; }
+        public String getDirection() { return direction; }
+        public void setDirection(String direction) { this.direction = direction; }
+        public Integer getLevels() { return levels; }
+        public void setLevels(Integer levels) { this.levels = levels; }
+        public String getZone() { return zone; }
+        public void setZone(String zone) { this.zone = zone; }
+        public BigDecimal getBayWidth() { return bayWidth; }
+        public void setBayWidth(BigDecimal bayWidth) { this.bayWidth = bayWidth; }
+        public BigDecimal getBayDepth() { return bayDepth; }
+        public void setBayDepth(BigDecimal bayDepth) { this.bayDepth = bayDepth; }
+        public BigDecimal getAisleWidth() { return aisleWidth; }
+        public void setAisleWidth(BigDecimal aisleWidth) { this.aisleWidth = aisleWidth; }
+        public Integer getTunnelLevelFrom() { return tunnelLevelFrom; }
+        public void setTunnelLevelFrom(Integer tunnelLevelFrom) { this.tunnelLevelFrom = tunnelLevelFrom; }
+        public Integer getTunnelLevelTo() { return tunnelLevelTo; }
+        public void setTunnelLevelTo(Integer tunnelLevelTo) { this.tunnelLevelTo = tunnelLevelTo; }
+        public List<Integer> getPickFaceLevels() { return pickFaceLevels; }
+        public void setPickFaceLevels(List<Integer> pickFaceLevels) { this.pickFaceLevels = pickFaceLevels; }
+        public BigDecimal getStartPointX() { return startPointX; }
+        public void setStartPointX(BigDecimal startPointX) { this.startPointX = startPointX; }
+        public BigDecimal getStartPointY() { return startPointY; }
+        public void setStartPointY(BigDecimal startPointY) { this.startPointY = startPointY; }
+        public List<WarehouseLayoutLocation> getBaseLocations() { return baseLocations; }
+        public void setBaseLocations(List<WarehouseLayoutLocation> baseLocations) { this.baseLocations = baseLocations; }
+        public List<WarehouseLayoutLocation> getLocations() { return locations; }
+        public void setLocations(List<WarehouseLayoutLocation> locations) { this.locations = locations; }
+    }
+
+    public static class WarehouseLayout {
+        private BigDecimal warehouseWidth;
+        private BigDecimal warehouseHeight;
+        private List<WarehouseBoundaryPoint> boundaryPolygon = new ArrayList<>();
+        private List<WarehouseAisle> aisles = new ArrayList<>();
+
+        public BigDecimal getWarehouseWidth() { return warehouseWidth; }
+        public void setWarehouseWidth(BigDecimal warehouseWidth) { this.warehouseWidth = warehouseWidth; }
+        public BigDecimal getWarehouseHeight() { return warehouseHeight; }
+        public void setWarehouseHeight(BigDecimal warehouseHeight) { this.warehouseHeight = warehouseHeight; }
+        public List<WarehouseBoundaryPoint> getBoundaryPolygon() { return boundaryPolygon; }
+        public void setBoundaryPolygon(List<WarehouseBoundaryPoint> boundaryPolygon) { this.boundaryPolygon = boundaryPolygon; }
+        public List<WarehouseAisle> getAisles() { return aisles; }
+        public void setAisles(List<WarehouseAisle> aisles) { this.aisles = aisles; }
+    }
+
+    public static class AutoGeneratedLayoutSummary {
+        private int areas;
+        private int racks;
+        private int locations;
+        private int inferredPositions;
+        private int inferredLevels;
+        private int skippedRows;
+
+        public int getAreas() { return areas; }
+        public void setAreas(int areas) { this.areas = areas; }
+        public int getRacks() { return racks; }
+        public void setRacks(int racks) { this.racks = racks; }
+        public int getLocations() { return locations; }
+        public void setLocations(int locations) { this.locations = locations; }
+        public int getInferredPositions() { return inferredPositions; }
+        public void setInferredPositions(int inferredPositions) { this.inferredPositions = inferredPositions; }
+        public int getInferredLevels() { return inferredLevels; }
+        public void setInferredLevels(int inferredLevels) { this.inferredLevels = inferredLevels; }
+        public int getSkippedRows() { return skippedRows; }
+        public void setSkippedRows(int skippedRows) { this.skippedRows = skippedRows; }
+    }
+
+    public static class AutoGeneratedLayoutResponse {
+        private WarehouseLayout layout = new WarehouseLayout();
+        private AutoGeneratedLayoutSummary summary = new AutoGeneratedLayoutSummary();
+        private List<String> warnings = new ArrayList<>();
+
+        public WarehouseLayout getLayout() { return layout; }
+        public void setLayout(WarehouseLayout layout) { this.layout = layout; }
+        public AutoGeneratedLayoutSummary getSummary() { return summary; }
+        public void setSummary(AutoGeneratedLayoutSummary summary) { this.summary = summary; }
+        public List<String> getWarnings() { return warnings; }
+        public void setWarnings(List<String> warnings) { this.warnings = warnings; }
+    }
+
+    public static class OracleLocationMasterRow {
+        private String locationCode;
+        private String areaCode;
+        private String areaName;
+        private String rackCode;
+        private String positionCode;
+        private String levelCode;
+        private BigDecimal length;
+        private BigDecimal width;
+        private BigDecimal height;
+
+        public String getLocationCode() { return locationCode; }
+        public void setLocationCode(String locationCode) { this.locationCode = locationCode; }
+        public String getAreaCode() { return areaCode; }
+        public void setAreaCode(String areaCode) { this.areaCode = areaCode; }
+        public String getAreaName() { return areaName; }
+        public void setAreaName(String areaName) { this.areaName = areaName; }
+        public String getRackCode() { return rackCode; }
+        public void setRackCode(String rackCode) { this.rackCode = rackCode; }
+        public String getPositionCode() { return positionCode; }
+        public void setPositionCode(String positionCode) { this.positionCode = positionCode; }
+        public String getLevelCode() { return levelCode; }
+        public void setLevelCode(String levelCode) { this.levelCode = levelCode; }
+        public BigDecimal getLength() { return length; }
+        public void setLength(BigDecimal length) { this.length = length; }
+        public BigDecimal getWidth() { return width; }
+        public void setWidth(BigDecimal width) { this.width = width; }
+        public BigDecimal getHeight() { return height; }
+        public void setHeight(BigDecimal height) { this.height = height; }
+    }
+
     public static class WarehouseProfileDetail extends WarehouseProfileSummary {
         private String layoutData;
         private List<WarehouseLayoutLocation> locations = new ArrayList<>();
@@ -506,5 +659,59 @@ public final class WarehouseOptimizeModels {
         public void setChangedLocations(List<LiveLocationState> changedLocations) { this.changedLocations = changedLocations; }
         public ViewerDiagnostics getDiagnostics() { return diagnostics; }
         public void setDiagnostics(ViewerDiagnostics diagnostics) { this.diagnostics = diagnostics; }
+    }
+
+    public static class OracleStatusAggregateRow {
+        private String statusCode;
+        private long orderCount;
+        private BigDecimal csQty;
+        private BigDecimal pcsQty;
+
+        public String getStatusCode() { return statusCode; }
+        public void setStatusCode(String statusCode) { this.statusCode = statusCode; }
+        public long getOrderCount() { return orderCount; }
+        public void setOrderCount(long orderCount) { this.orderCount = orderCount; }
+        public BigDecimal getCsQty() { return csQty; }
+        public void setCsQty(BigDecimal csQty) { this.csQty = csQty; }
+        public BigDecimal getPcsQty() { return pcsQty; }
+        public void setPcsQty(BigDecimal pcsQty) { this.pcsQty = pcsQty; }
+    }
+
+    public static class WorkingStatusSnapshotItem {
+        private String flow;
+        private String statusCode;
+        private String statusLabel;
+        private String color;
+        private long orderCount;
+        private long totalOrders;
+        private BigDecimal csQty;
+        private BigDecimal pcsQty;
+
+        public String getFlow() { return flow; }
+        public void setFlow(String flow) { this.flow = flow; }
+        public String getStatusCode() { return statusCode; }
+        public void setStatusCode(String statusCode) { this.statusCode = statusCode; }
+        public String getStatusLabel() { return statusLabel; }
+        public void setStatusLabel(String statusLabel) { this.statusLabel = statusLabel; }
+        public String getColor() { return color; }
+        public void setColor(String color) { this.color = color; }
+        public long getOrderCount() { return orderCount; }
+        public void setOrderCount(long orderCount) { this.orderCount = orderCount; }
+        public long getTotalOrders() { return totalOrders; }
+        public void setTotalOrders(long totalOrders) { this.totalOrders = totalOrders; }
+        public BigDecimal getCsQty() { return csQty; }
+        public void setCsQty(BigDecimal csQty) { this.csQty = csQty; }
+        public BigDecimal getPcsQty() { return pcsQty; }
+        public void setPcsQty(BigDecimal pcsQty) { this.pcsQty = pcsQty; }
+    }
+
+    public static class WorkingStatusSnapshotResponse {
+        private LocalDateTime generatedAt;
+        private List<WorkingStatusSnapshotItem> statuses = new ArrayList<>();
+
+        public LocalDateTime getGeneratedAt() { return generatedAt; }
+        public void setGeneratedAt(LocalDateTime generatedAt) { this.generatedAt = generatedAt; }
+        public List<WorkingStatusSnapshotItem> getStatuses() { return statuses; }
+        public void setStatuses(List<WorkingStatusSnapshotItem> statuses) { this.statuses = statuses; }
     }
 }

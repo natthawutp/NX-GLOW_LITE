@@ -26,34 +26,34 @@ public class ArrivalConfirmationRepository {
     private static final DateTimeFormatter HMS_FORMATTER = DateTimeFormatter.ofPattern("HHmmss");
 
     private static final String[] AVH_SOURCES = {
-        "SGWH0001.GWH_TJ_AV_H",
+        "GWH.GWH_TJ_AV_H",
         "GWH_TJ_AV_H"
     };
 
     private static final String[] AVD_SOURCES = {
-        "SGWH0001.GWH_TJ_AV_D",
+        "GWH.GWH_TJ_AV_D",
         "GWH_TJ_AV_D"
     };
 
     private static final String[] AVR_SOURCES = {
-        "SGWH0001.GWH_TJ_AV_R",
+        "GWH.GWH_TJ_AV_R",
         "GWH_TJ_AV_R"
     };
 
     private static final String[] ST_SOURCES = {
-        "SGWH0001.GWH_TJ_ST",
+        "GWH.GWH_TJ_ST",
         "GWH_TJ_ST"
     };
 
     private static final String[] CUST_SOURCES = {
-        "SGWH0001.GWH_TM_CUST",
+        "GWH.GWH_TM_CUST",
         "GWH_TM_CUST"
     };
 
     private static final String[] PRCC_SOURCES = {
-        "SGWH0001.VGWH_TM_PRCC",
+        "GWH.VGWH_TM_PRCC",
         "VGWH_TM_PRCC",
-        "SGWH0001.GWH_TM_PRCC",
+        "GWH.GWH_TM_PRCC",
         "GWH_TM_PRCC"
     };
 
@@ -1102,7 +1102,7 @@ public class ArrivalConfirmationRepository {
      * Get operation date (OPD_YMD) from GWH_TM_OPD.
      */
     public String getOperationDate(String cpny, String whs, String cust) {
-        String[] sources = {"SGWH0001.GWH_TM_OPD", "GWH_TM_OPD"};
+        String[] sources = {"GWH.GWH_TM_OPD", "GWH_TM_OPD"};
         for (String source : sources) {
             try {
                 String sql = "SELECT OPD_YMD FROM " + source +
@@ -1131,7 +1131,7 @@ public class ArrivalConfirmationRepository {
      * Returns PIK_NUM where PIK_AUTO_FLG = 'Y', or null if not configured.
      */
     public Integer getPikAutoFlag(String cpny, String whs, String cust) {
-        String[] sources = {"SGWH0001.GWH_TM_PIK", "GWH_TM_PIK"};
+        String[] sources = {"GWH.GWH_TM_PIK", "GWH_TM_PIK"};
         for (String source : sources) {
             try {
                 String sql = "SELECT PIK_NUM FROM " + source +
@@ -1163,7 +1163,7 @@ public class ArrivalConfirmationRepository {
      * CODE_KND='367', CODE_COD='01'. Returns CODE_INFO1 ('Y' or 'N').
      */
     public String getFutureArrivalDatePermission(String cpny, String whs, String cust) {
-        String[] sources = {"SGWH0001.VGWH_TM_CODE", "VGWH_TM_CODE", "SGWH0001.GWH_TM_CODE", "GWH_TM_CODE"};
+        String[] sources = {"GWH.VGWH_TM_CODE", "VGWH_TM_CODE", "GWH.GWH_TM_CODE", "GWH_TM_CODE"};
         for (String source : sources) {
             try {
                 String sql = "SELECT CODE_INFO1 FROM " + source +
@@ -1220,14 +1220,14 @@ public class ArrivalConfirmationRepository {
             ", T1.AVR_DMG_FLG" +                                                     // [26]
             ", T2.AVD_PCUM_PCS, T2.AVD_PCUM_CS, T2.AVD_PSSA_FLG" +                   // [27-29]
             ", T2.AVD_AVLN_NUM" +                                                     // [30]
-            " FROM SGWH0001.GWH_TJ_AV_R T1" +
-            " INNER JOIN SGWH0001.GWH_TJ_AV_D T2 ON" +
+            " FROM GWH.GWH_TJ_AV_R T1" +
+            " INNER JOIN GWH.GWH_TJ_AV_D T2 ON" +
             " T1.AVR_CPNY_COD = T2.AVD_CPNY_COD" +
             " AND T1.AVR_WHS_COD = T2.AVD_WHS_COD" +
             " AND T1.AVR_CUST_COD = T2.AVD_CUST_COD" +
             " AND T1.AVR_AS_NUM = T2.AVD_AV_NUM" +
             " AND T1.AVR_ASLN_NUM = T2.AVD_AVLN_NUM" +
-            " INNER JOIN SGWH0001.GWH_TJ_AV_H T3 ON" +
+            " INNER JOIN GWH.GWH_TJ_AV_H T3 ON" +
             " T1.AVR_CPNY_COD = T3.AVH_CPNY_COD" +
             " AND T1.AVR_WHS_COD = T3.AVH_WHS_COD" +
             " AND T1.AVR_CUST_COD = T3.AVH_CUST_COD" +
@@ -1235,7 +1235,7 @@ public class ArrivalConfirmationRepository {
             " INNER JOIN (" +
             "   SELECT AVR_CPNY_COD, AVR_WHS_COD, AVR_CUST_COD, AVR_AS_NUM, AVR_ASLN_NUM," +
             "     SUM(AVR_RTPC_QTY) AS AVR_RTPC_QTY" +
-            "   FROM SGWH0001.GWH_TJ_AV_R" +
+            "   FROM GWH.GWH_TJ_AV_R" +
             "   WHERE AVR_CPNY_COD = :cpny AND AVR_WHS_COD = :whs AND AVR_CUST_COD = :cust" +
             "     AND AVR_AS_NUM = :avNum AND DEL_FLG = '0'" +
             "   GROUP BY AVR_CPNY_COD, AVR_WHS_COD, AVR_CUST_COD, AVR_AS_NUM, AVR_ASLN_NUM" +
@@ -1245,7 +1245,7 @@ public class ArrivalConfirmationRepository {
             " AND T1.AVR_CUST_COD = T4.AVR_CUST_COD" +
             " AND T1.AVR_AS_NUM = T4.AVR_AS_NUM" +
             " AND T1.AVR_ASLN_NUM = T4.AVR_ASLN_NUM" +
-            " LEFT JOIN SGWH0001.GWH_TM_TRN M1 ON T3.AVH_TRN_KND = M1.TRN_KND" +
+            " LEFT JOIN GWH.GWH_TM_TRN M1 ON T3.AVH_TRN_KND = M1.TRN_KND" +
             "   AND M1.TRN_CPNY_COD = :cpny AND M1.TRN_WHS_COD = :whs AND M1.TRN_CUST_COD = :cust" +
             "   AND M1.DEL_FLG = '0'" +
             " WHERE T1.AVR_CPNY_COD = :cpny AND T1.AVR_WHS_COD = :whs AND T1.AVR_CUST_COD = :cust" +
@@ -1261,7 +1261,7 @@ public class ArrivalConfirmationRepository {
     }
 
     /**
-     * Check AVD status gate — returns true if any detail line has status < PRCC_RSTS
+     * Check AVD status gate โ€” returns true if any detail line has status < PRCC_RSTS
      * with STS_WKST_KND in ('2','3'). Matches standard getAvdStatus.
      */
     public boolean hasDetailsBelowRequiredStatus(String cpny, String whs, String cust,
@@ -1269,7 +1269,7 @@ public class ArrivalConfirmationRepository {
         for (String source : AVD_SOURCES) {
             try {
                 String sql = "SELECT COUNT(*) FROM " + source + " T1" +
-                    " INNER JOIN SGWH0001.GWH_TM_STS T2 ON T1.AVD_AV_STS = T2.STS_COD" +
+                    " INNER JOIN GWH.GWH_TM_STS T2 ON T1.AVD_AV_STS = T2.STS_COD" +
                     " AND (T2.STS_WKST_KND = '2' OR T2.STS_WKST_KND = '3')" +
                     " AND T2.STS_BSNS_COD = 'AV'" +
                     " AND T2.STS_CPNY_COD = :cpny AND T2.STS_WHS_COD = :whs AND T2.STS_CUST_COD = :cust" +
@@ -1303,8 +1303,8 @@ public class ArrivalConfirmationRepository {
             String sql =
                 "SELECT NVL(SUM(TJ1.AVR_RTPC_QTY), 0) AS TOTAL_INSPECT_QTY" +
                 ", NVL(SUM(TJ2.SRL_TINP_QTY), 0) AS TOTAL_INPUT_SERIAL_QTY" +
-                " FROM SGWH0001.GWH_TJ_AV_R TJ1" +
-                " INNER JOIN SGWH0001.GWH_TM_PROD TM1 ON" +
+                " FROM GWH.GWH_TJ_AV_R TJ1" +
+                " INNER JOIN GWH.GWH_TM_PROD TM1 ON" +
                 " TJ1.AVR_CPNY_COD = TM1.PROD_CPNY_COD" +
                 " AND TJ1.AVR_WHS_COD = TM1.PROD_WHS_COD" +
                 " AND TJ1.AVR_CUST_COD = TM1.PROD_CUST_COD" +
@@ -1314,7 +1314,7 @@ public class ArrivalConfirmationRepository {
                 "   SELECT SRL_CPNY_COD, SRL_WHS_COD, SRL_CUST_COD, SRL_AV_NUM, SRL_AVLN_NUM," +
                 "     SRL_AVSQ_NUM, SRL_PROD_COD, SRL_ORGN_COD, SRL_AS_NUM," +
                 "     COUNT(1) AS SRL_TINP_QTY" +
-                "   FROM SGWH0001.GWH_TJ_SRL" +
+                "   FROM GWH.GWH_TJ_SRL" +
                 "   WHERE SRL_CPNY_COD = :cpny AND SRL_WHS_COD = :whs AND SRL_CUST_COD = :cust" +
                 "     AND SRL_AS_NUM = :avNum AND SRL_AS_KND = 'AV' AND DEL_FLG = '0'" +
                 "   GROUP BY SRL_CPNY_COD, SRL_WHS_COD, SRL_CUST_COD, SRL_AV_NUM," +
@@ -1355,8 +1355,8 @@ public class ArrivalConfirmationRepository {
         try {
             String sql =
                 "SELECT S.STKH_STK_STS, T.TRN_UIUS_FLG, T.TRN_UOUS_FLG" +
-                " FROM SGWH0001.GWH_TJ_STK_H S" +
-                " LEFT JOIN SGWH0001.GWH_TM_TRN T ON T.TRN_CPNY_COD = :cpny AND T.TRN_WHS_COD = :whs" +
+                " FROM GWH.GWH_TJ_STK_H S" +
+                " LEFT JOIN GWH.GWH_TM_TRN T ON T.TRN_CPNY_COD = :cpny AND T.TRN_WHS_COD = :whs" +
                 "   AND T.TRN_CUST_COD = :cust AND T.DEL_FLG = '0'" +
                 " WHERE S.STKH_CPNY_COD = :cpny AND S.STKH_WHS_COD = :whs" +
                 " AND S.STKH_CUST_COD = :cust AND S.DEL_FLG = '0'" +
@@ -1385,7 +1385,7 @@ public class ArrivalConfirmationRepository {
                           String asKnd, String opKnd, String oprtUser,
                           String endYmd, String endTim,
                           String userCode, String programCode) {
-        String[] sources = {"SGWH0001.GWH_TJ_XT", "GWH_TJ_XT"};
+        String[] sources = {"GWH.GWH_TJ_XT", "GWH_TJ_XT"};
         for (String source : sources) {
             try {
                 String sql =
@@ -1432,7 +1432,7 @@ public class ArrivalConfirmationRepository {
                 return;
             } catch (RuntimeException ex) {
                 if (isObjectNotFound(ex)) continue;
-                // Duplicate XT — log and skip
+                // Duplicate XT โ€” log and skip
                 String msg = ex.getMessage();
                 if (msg != null && (msg.contains("ORA-00001") || msg.contains("unique constraint"))) {
                     return;
@@ -1448,8 +1448,8 @@ public class ArrivalConfirmationRepository {
      */
     public String getTransactionKindPartialFlag(String cpny, String whs, String cust, String avNum) {
         try {
-            String sql = "SELECT T2.TRN_PDAC_FLG FROM SGWH0001.GWH_TJ_AV_H T1" +
-                " LEFT JOIN SGWH0001.GWH_TM_TRN T2 ON T1.AVH_TRN_KND = T2.TRN_KND" +
+            String sql = "SELECT T2.TRN_PDAC_FLG FROM GWH.GWH_TJ_AV_H T1" +
+                " LEFT JOIN GWH.GWH_TM_TRN T2 ON T1.AVH_TRN_KND = T2.TRN_KND" +
                 "   AND T2.TRN_CPNY_COD = :cpny AND T2.TRN_WHS_COD = :whs AND T2.TRN_CUST_COD = :cust" +
                 "   AND T2.DEL_FLG = '0'" +
                 " WHERE T1.AVH_AV_NUM = :avNum AND T1.AVH_CPNY_COD = :cpny" +

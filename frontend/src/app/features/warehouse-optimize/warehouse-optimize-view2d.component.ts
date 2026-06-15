@@ -53,40 +53,80 @@ import { formatNumber, normalizeLayout } from './shared/warehouse-optimize-layou
       </div>
     </section>
 
-    <section class="content-grid">
+    <section class="content-grid" [class.side-collapsed]="detailsPanelCollapsed">
       <section class="panel map-panel">
         <div class="panel-head">
-          <h3>{{ profileName }}</h3>
-          <span class="meta">{{ formatNumber(layout?.warehouseWidth) }}m x {{ formatNumber(layout?.warehouseHeight) }}m</span>
+          <div>
+            <h3>{{ profileName }}</h3>
+            <span class="meta">{{ formatNumber(layout?.warehouseWidth) }}m x {{ formatNumber(layout?.warehouseHeight) }}m</span>
+          </div>
+          <div class="panel-head-actions">
+            <span>{{ assignments.length }} assignments</span>
+            <button
+              *ngIf="detailsPanelCollapsed"
+              pButton
+              type="button"
+              class="p-button-text p-button-sm"
+              icon="pi pi-angle-left"
+              aria-label="Expand assignments panel"
+              (click)="toggleDetailsPanel()">
+            </button>
+          </div>
         </div>
         <wms-warehouse-layout-map [dataLayout]="layout" [assignments]="assignments" [showLabels]="showLabels"></wms-warehouse-layout-map>
       </section>
 
-      <section class="panel table-panel">
-        <div class="panel-head">
-          <h3>Assignments</h3>
-          <button pButton label="Toggle Labels" icon="pi pi-tag" class="p-button-text p-button-sm" (click)="showLabels = !showLabels"></button>
-        </div>
-        <p-table [value]="assignments" [scrollable]="true" scrollHeight="640px" styleClass="p-datatable-sm">
-          <ng-template pTemplate="header">
-            <tr>
-              <th>Location</th>
-              <th>SKU</th>
-              <th>Category</th>
-              <th>Velocity</th>
-              <th>Score</th>
-            </tr>
-          </ng-template>
-          <ng-template pTemplate="body" let-row>
-            <tr>
-              <td>{{ row.location }}</td>
-              <td>{{ row.productSku }}</td>
-              <td>{{ row.productCategory || '-' }}</td>
-              <td>{{ row.velocityClass || '-' }}</td>
-              <td>{{ row.assignmentScore ?? '-' }}</td>
-            </tr>
-          </ng-template>
-        </p-table>
+      <section class="side-column" [class.collapsed]="detailsPanelCollapsed">
+        <section class="panel collapsed-rail" *ngIf="detailsPanelCollapsed">
+          <div class="panel-head">
+            <h3>Assignments</h3>
+            <button
+              pButton
+              type="button"
+              class="p-button-text p-button-sm"
+              icon="pi pi-angle-left"
+              aria-label="Expand assignments panel"
+              (click)="toggleDetailsPanel()">
+            </button>
+          </div>
+        </section>
+
+        <section class="panel table-panel" *ngIf="!detailsPanelCollapsed">
+          <div class="panel-head">
+            <h3>Assignments</h3>
+            <div class="panel-head-actions">
+              <button pButton label="Toggle Labels" icon="pi pi-tag" class="p-button-text p-button-sm" (click)="showLabels = !showLabels"></button>
+              <button
+                pButton
+                type="button"
+                class="p-button-text p-button-sm"
+                icon="pi pi-angle-right"
+                aria-label="Collapse assignments panel"
+                (click)="toggleDetailsPanel()">
+              </button>
+            </div>
+          </div>
+          <p-table [value]="assignments" [scrollable]="true" scrollHeight="640px" styleClass="p-datatable-sm">
+            <ng-template pTemplate="header">
+              <tr>
+                <th>Location</th>
+                <th>SKU</th>
+                <th>Category</th>
+                <th>Velocity</th>
+                <th>Score</th>
+              </tr>
+            </ng-template>
+            <ng-template pTemplate="body" let-row>
+              <tr>
+                <td>{{ row.location }}</td>
+                <td>{{ row.productSku }}</td>
+                <td>{{ row.productCategory || '-' }}</td>
+                <td>{{ row.velocityClass || '-' }}</td>
+                <td>{{ row.assignmentScore ?? '-' }}</td>
+              </tr>
+            </ng-template>
+          </p-table>
+        </section>
       </section>
     </section>
   `,
@@ -100,16 +140,36 @@ import { formatNumber, normalizeLayout } from './shared/warehouse-optimize-layou
     .summary div { border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px; background: #f8fafc; display: flex; flex-direction: column; gap: 4px; }
     .summary span { font-size: 12px; color: #64748b; }
     .summary strong { font-size: 18px; color: #0f172a; }
-    .content-grid { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(420px, 0.9fr); gap: 18px; }
+    .content-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(360px, 420px); gap: 18px; align-items: start; }
+    .content-grid.side-collapsed { grid-template-columns: minmax(0, 1fr) 88px; }
     .map-panel { min-height: 760px; }
     .table-panel { min-height: 760px; }
+    .side-column { display: flex; flex-direction: column; gap: 18px; min-width: 0; }
+    .side-column.collapsed { gap: 0; }
     .panel-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
     .panel-head h3 { margin: 0; font-size: 15px; font-weight: 700; color: #0f172a; }
+    .panel-head-actions { display: flex; align-items: center; gap: 10px; color: #64748b; font-size: 12px; }
     .meta { font-size: 12px; color: #64748b; }
+    .collapsed-rail { min-height: 760px; padding: 12px 8px; position: sticky; top: 0; }
+    .collapsed-rail .panel-head { flex-direction: column; justify-content: flex-start; align-items: center; gap: 16px; margin-bottom: 0; }
+    .collapsed-rail .panel-head h3 {
+      writing-mode: vertical-rl;
+      transform: rotate(180deg);
+      font-size: 13px;
+      color: #475569;
+      min-height: 180px;
+      text-align: center;
+    }
     .w-full { width: 100%; }
     @media (max-width: 1200px) {
-      .toolbar, .content-grid { grid-template-columns: 1fr; }
+      .toolbar, .content-grid, .content-grid.side-collapsed { grid-template-columns: 1fr; }
       .summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .collapsed-rail { min-height: 120px; position: static; }
+      .collapsed-rail .panel-head h3 {
+        writing-mode: horizontal-tb;
+        transform: none;
+        min-height: 0;
+      }
     }
     @media (max-width: 640px) {
       .summary { grid-template-columns: 1fr; }
@@ -125,6 +185,7 @@ export class WarehouseOptimizeView2dComponent {
   layout: WarehouseLayout | null = null;
   assignments: SlottingAssignment[] = [];
   showLabels = false;
+  detailsPanelCollapsed = false;
   velocitySummary = { A: 0, B: 0, C: 0 };
 
   get profileOptions(): Array<{ label: string; value: number }> {
@@ -168,6 +229,10 @@ export class WarehouseOptimizeView2dComponent {
   selectProfile(profileId: number): void {
     this.selectedProfileId = profileId;
     this.state.selectProfile(profileId);
+  }
+
+  toggleDetailsPanel(): void {
+    this.detailsPanelCollapsed = !this.detailsPanelCollapsed;
   }
 
   loadAssignments(): void {

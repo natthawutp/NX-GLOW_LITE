@@ -30,6 +30,11 @@ import {
   normalizeLayout,
   prettyLayoutJson
 } from './shared/warehouse-optimize-layout.utils';
+import {
+  WORKING_STATUS_FLOW_OPTIONS,
+  workingStatusDefinition,
+  workingStatusOptionsForFlow
+} from './shared/warehouse-working-status.utils';
 
 type DesignerMode = 'draw' | 'boundary' | 'select' | 'move' | 'delete' | 'measure';
 type SaveState = 'idle' | 'dirty' | 'saving' | 'success' | 'error';
@@ -38,6 +43,10 @@ interface PropertyFormModel {
   zone: string;
   type: string;
   direction: string;
+  workingStatusFlow: string;
+  workingStatusCode: string;
+  workingStatusLabel: string;
+  workingStatusColor: string;
   levels: number;
   tunnelLevelFrom: number;
   tunnelLevelTo: number;
@@ -57,6 +66,7 @@ const STORAGE_TYPE_OPTIONS = [
   { value: 'DRIVE_IN', label: 'Drive-In Rack' },
   { value: 'FLOOR', label: 'Floor Storage' },
   { value: 'STAGING', label: 'Staging Area' },
+  { value: 'WORKING_STATUS', label: 'Working Status' },
   { value: 'EMPTY_FLOOR', label: 'Empty Floor' },
   { value: 'WALKWAY', label: 'Walkway' },
   { value: 'OBSTACLE', label: 'Obstacle' },
@@ -139,15 +149,23 @@ function ensureDesignerEngineLoaded(): Promise<void> {
       title="Warehouse Optimize"
       subtitle="Interactive warehouse design with the original drawing workflow"
       icon="pi pi-compass">
+      <span *ngIf="showProfileLoading" class="load-state" aria-live="polite">
+        <span class="save-spinner" aria-hidden="true"></span>
+        Loading profile...
+      </span>
       <span *ngIf="saveStatusText" class="save-state" [class.save-state-dirty]="saveState === 'dirty'" [class.save-state-saving]="saveState === 'saving'" [class.save-state-success]="saveState === 'success'" [class.save-state-error]="saveState === 'error'">
         <span *ngIf="saveState === 'saving'" class="save-spinner" aria-hidden="true"></span>
         {{ saveStatusText }}
       </span>
-      <button type="button" class="header-action header-action-secondary" (click)="refreshProfiles()">
+      <button
+        type="button"
+        class="header-action header-action-secondary"
+        (click)="refreshProfiles()"
+        [disabled]="showWorkspaceBusy">
         <i class="pi pi-refresh"></i>
         <span>Refresh Profiles</span>
       </button>
-      <button type="button" class="header-action" (click)="saveProfile()" [disabled]="isSaving">
+      <button type="button" class="header-action" (click)="saveProfile()" [disabled]="isSaving || isGeneratingFromDb">
         <i class="pi" [class.pi-save]="!isSaving" [class.pi-spin]="isSaving" [class.pi-spinner]="isSaving"></i>
         <span>{{ isSaving ? 'Saving Layout...' : 'Save Layout' }}</span>
       </button>
@@ -155,58 +173,73 @@ function ensureDesignerEngineLoaded(): Promise<void> {
 
     <wms-warehouse-optimize-nav></wms-warehouse-optimize-nav>
 
-    <section class="panel profile-panel">
-      <div class="section-head">
-        <div>
-          <h3>Profile</h3>
-          <p>Shared warehouse geometry lives here, while 2D and 3D pages stay read-only.</p>
+    <div class="design-shell" [class.design-shell-busy]="showWorkspaceBusy">
+      <section class="panel profile-panel">
+        <div class="section-head">
+          <div>
+            <h3>Profile</h3>
+            <p>Shared warehouse geometry lives here, while 2D and 3D pages stay read-only.</p>
+          </div>
+          <span class="chip">Warehouse shared</span>
         </div>
-        <span class="chip">Warehouse shared</span>
-      </div>
 
-      <div class="profile-grid">
-        <label class="field">
-          <span>Existing profile</span>
-          <select [ngModel]="selectedProfileId" (ngModelChange)="selectProfile($event)">
-            <option [ngValue]="null">Choose a profile</option>
-            <option *ngFor="let profile of state.profiles(); trackBy: trackProfile" [ngValue]="profile.id">
-              {{ profile.profileName }} ({{ profile.warehouseCode }})
-            </option>
-          </select>
-        </label>
+        <div class="profile-grid">
+          <label class="field">
+            <span>Existing profile</span>
+            <select [ngModel]="selectedProfileId" (ngModelChange)="selectProfile($event)">
+              <option [ngValue]="null">Choose a profile</option>
+              <option *ngFor="let profile of state.profiles(); trackBy: trackProfile" [ngValue]="profile.id">
+                {{ profile.profileName }} ({{ profile.warehouseCode }})
+              </option>
+            </select>
+          </label>
 
-        <label class="field">
-          <span>Profile name</span>
-          <input type="text" [(ngModel)]="profileName" (ngModelChange)="updateDraftMetadata()" maxlength="100" />
-        </label>
+          <label class="field">
+            <span>Profile name</span>
+            <input type="text" [(ngModel)]="profileName" (ngModelChange)="updateDraftMetadata()" maxlength="100" />
+          </label>
 
-        <label class="field field-span-2">
-          <span>Description</span>
-          <textarea rows="2" [(ngModel)]="description" (ngModelChange)="updateDraftMetadata()" maxlength="255"></textarea>
-        </label>
+          <label class="field field-span-2">
+            <span>Description</span>
+            <textarea rows="2" [(ngModel)]="description" (ngModelChange)="updateDraftMetadata()" maxlength="255"></textarea>
+          </label>
 
-        <label class="field">
-          <span>Warehouse width (m)</span>
-          <input type="number" [(ngModel)]="warehouseWidth" min="10" max="500" step="1" />
-        </label>
+          <label class="field">
+            <span>Warehouse width (m)</span>
+            <input type="number" [(ngModel)]="warehouseWidth" min="10" max="500" step="1" />
+          </label>
 
-        <label class="field">
-          <span>Warehouse height (m)</span>
-          <input type="number" [(ngModel)]="warehouseHeight" min="10" max="500" step="1" />
-        </label>
+          <label class="field">
+            <span>Warehouse height (m)</span>
+            <input type="number" [(ngModel)]="warehouseHeight" min="10" max="500" step="1" />
+          </label>
 
-        <div class="field field-actions">
-          <button type="button" class="soft-btn" (click)="newBlankLayout()">New Blank</button>
-          <button type="button" class="soft-btn" (click)="resizeWarehouse()">Apply Size</button>
-          <button type="button" class="soft-btn" (click)="toggleAdvancedJson()">
-            {{ showAdvancedJson ? 'Hide JSON' : 'Show JSON' }}
+          <div class="field field-actions">
+            <button type="button" class="soft-btn" (click)="newBlankLayout()">New Blank</button>
+            <button type="button" class="soft-btn" (click)="resizeWarehouse()">Apply Size</button>
+            <button type="button" class="soft-btn" (click)="toggleAdvancedJson()">
+              {{ showAdvancedJson ? 'Hide JSON' : 'Show JSON' }}
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <section class="workspace-grid" [class.side-collapsed]="sidebarPanelsCollapsed">
+      <section class="panel collapsed-rail collapsed-sidebar-rail" *ngIf="sidebarPanelsCollapsed">
+        <div class="panel-head collapsed-rail-head">
+          <h3>Design Panels</h3>
+          <button
+            type="button"
+            class="icon-btn"
+            aria-label="Expand design panels"
+            title="Expand design panels"
+            (click)="toggleSidebarPanels()">
+            <i class="pi pi-angle-right"></i>
           </button>
         </div>
-      </div>
-    </section>
+      </section>
 
-    <section class="workspace-grid">
-      <aside class="sidebar">
+      <aside class="sidebar" *ngIf="!sidebarPanelsCollapsed">
         <section class="panel">
           <div class="section-head compact">
             <div>
@@ -281,32 +314,65 @@ function ensureDesignerEngineLoaded(): Promise<void> {
               </select>
             </label>
 
-            <label class="field">
+            <label class="field" *ngIf="propertyForm.type === 'WORKING_STATUS'">
+              <span>Operation flow</span>
+              <select
+                [ngModel]="propertyForm.workingStatusFlow"
+                (ngModelChange)="updateWorkingStatusFlow($event)">
+                <option *ngFor="let option of workingStatusFlowOptions" [ngValue]="option.value">{{ option.label }}</option>
+              </select>
+            </label>
+
+            <label class="field" *ngIf="propertyForm.type === 'WORKING_STATUS'">
+              <span>System status</span>
+              <select
+                [ngModel]="propertyForm.workingStatusCode"
+                (ngModelChange)="updateWorkingStatusCode($event)">
+                <option
+                  *ngFor="let option of workingStatusOptions(propertyForm.workingStatusFlow)"
+                  [ngValue]="option.code">
+                  {{ option.label }}
+                </option>
+              </select>
+            </label>
+
+            <div class="field field-span-2 status-preview" *ngIf="propertyForm.type === 'WORKING_STATUS'">
+              <span>Status preview</span>
+              <div class="status-preview-card">
+                <i class="status-preview-swatch" [style.background]="propertyForm.workingStatusColor"></i>
+                <div class="status-preview-copy">
+                  <strong>{{ propertyForm.workingStatusLabel || 'No status selected' }}</strong>
+                  <small>{{ propertyForm.workingStatusFlow }} {{ propertyForm.workingStatusCode }}</small>
+                </div>
+              </div>
+            </div>
+
+            <label class="field" *ngIf="propertyForm.type !== 'WORKING_STATUS'">
               <span>Levels</span>
               <input type="number" [(ngModel)]="propertyForm.levels" min="1" max="12" step="1" />
             </label>
 
-            <label class="field">
+            <label class="field" *ngIf="propertyForm.type !== 'WORKING_STATUS'">
               <span>Tunnel from</span>
               <input type="number" [(ngModel)]="propertyForm.tunnelLevelFrom" min="1" max="12" step="1" />
             </label>
 
-            <label class="field">
+            <label class="field" *ngIf="propertyForm.type !== 'WORKING_STATUS'">
               <span>Tunnel to</span>
               <input type="number" [(ngModel)]="propertyForm.tunnelLevelTo" min="1" max="12" step="1" />
             </label>
 
-            <label class="field">
+            <label class="field" *ngIf="propertyForm.type !== 'WORKING_STATUS'">
               <span>Bay width (m)</span>
               <input type="number" [(ngModel)]="propertyForm.bayWidth" min="0.5" max="5" step="0.1" />
             </label>
 
-            <label class="field">
+            <label class="field" *ngIf="propertyForm.type !== 'WORKING_STATUS'">
               <span>Bay depth (m)</span>
               <input type="number" [(ngModel)]="propertyForm.bayDepth" min="0.5" max="3" step="0.1" />
             </label>
 
-            <label class="field">
+            <label class="field" *ngIf="propertyForm.type !== 'WORKING_STATUS'">
               <span>Aisle width (m)</span>
               <input type="number" [(ngModel)]="propertyForm.aisleWidth" min="0" max="6" step="0.1" />
             </label>
@@ -321,7 +387,7 @@ function ensureDesignerEngineLoaded(): Promise<void> {
               <input type="number" [(ngModel)]="propertyForm.startPointY" min="0" step="0.1" />
             </label>
 
-            <label class="field field-span-2">
+            <label class="field field-span-2" *ngIf="propertyForm.type !== 'WORKING_STATUS'">
               <span>Pick face levels</span>
               <select multiple [ngModel]="propertyForm.pickFaceLevels" (ngModelChange)="updatePickFaceLevels($event)" class="multi-select">
                 <option *ngFor="let level of levelOptions(propertyForm.levels)" [ngValue]="level">
@@ -450,8 +516,12 @@ function ensureDesignerEngineLoaded(): Promise<void> {
           </div>
 
           <div class="property-actions">
-            <button type="button" class="soft-btn primary" (click)="generateLayout()">Generate Grid</button>
-            <button type="button" class="soft-btn danger" (click)="clearDesign()">Clear Design</button>
+            <button type="button" class="soft-btn primary" (click)="generateLayout()" [disabled]="isGeneratingFromDb || isSaving">Generate Grid</button>
+            <button type="button" class="soft-btn" (click)="generateLayoutFromDb()" [disabled]="isGeneratingFromDb || isSaving">
+              <i class="pi" [class.pi-database]="!isGeneratingFromDb" [class.pi-spin]="isGeneratingFromDb" [class.pi-spinner]="isGeneratingFromDb"></i>
+              <span>{{ isGeneratingFromDb ? 'Generating from DB...' : 'Generate from DB' }}</span>
+            </button>
+            <button type="button" class="soft-btn danger" (click)="clearDesign()" [disabled]="isGeneratingFromDb || isSaving">Clear Design</button>
           </div>
         </section>
 
@@ -473,6 +543,27 @@ function ensureDesignerEngineLoaded(): Promise<void> {
       </aside>
 
       <section class="panel designer-panel">
+        <div class="panel-head designer-panel-head">
+          <div>
+            <h3>Layout Designer</h3>
+            <span class="panel-meta">{{ layout.aisles.length }} zones and {{ stats.locations }} locations</span>
+          </div>
+          <div class="panel-head-actions">
+            <span *ngIf="showProfileLoading" class="inline-loading" aria-live="polite">
+              <span class="save-spinner" aria-hidden="true"></span>
+              Applying saved layout...
+            </span>
+            <button
+              type="button"
+              class="icon-btn"
+              [attr.aria-label]="sidebarPanelsCollapsed ? 'Expand design panels' : 'Collapse design panels'"
+              [attr.title]="sidebarPanelsCollapsed ? 'Expand design panels' : 'Collapse design panels'"
+              (click)="toggleSidebarPanels()">
+              <i class="pi" [class.pi-angle-right]="sidebarPanelsCollapsed" [class.pi-angle-left]="!sidebarPanelsCollapsed"></i>
+            </button>
+          </div>
+        </div>
+
         <div class="designer-toolbar">
           <div class="toolbar-row">
             <div class="toolbar-group">
@@ -572,11 +663,28 @@ function ensureDesignerEngineLoaded(): Promise<void> {
           </div>
         </div>
       </section>
-    </section>
+
+      </section>
+
+      <div class="workspace-loading-overlay" *ngIf="showWorkspaceBusy" aria-live="polite">
+        <span class="save-spinner" aria-hidden="true"></span>
+        <strong>{{ workspaceBusyTitle }}</strong>
+        <span>{{ workspaceBusyDetail }}</span>
+      </div>
+    </div>
   `,
   styles: [`
     :host {
       display: block;
+    }
+
+    .design-shell {
+      position: relative;
+    }
+
+    .design-shell-busy .panel,
+    .design-shell-busy .workspace-grid {
+      user-select: none;
     }
 
     .header-action,
@@ -635,6 +743,20 @@ function ensureDesignerEngineLoaded(): Promise<void> {
       border: 1px solid #dbe2ea;
       background: #ffffff;
       color: #475569;
+      font-size: 12px;
+      font-weight: 600;
+    }
+
+    .load-state {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      min-height: 36px;
+      padding: 0 12px;
+      border-radius: 999px;
+      border: 1px solid #93c5fd;
+      background: #eff6ff;
+      color: #1d4ed8;
       font-size: 12px;
       font-weight: 600;
     }
@@ -783,6 +905,11 @@ function ensureDesignerEngineLoaded(): Promise<void> {
       grid-template-columns: minmax(310px, 360px) minmax(0, 1fr);
       gap: 18px;
       align-items: start;
+      position: relative;
+    }
+
+    .workspace-grid.side-collapsed {
+      grid-template-columns: 88px minmax(0, 1fr);
     }
 
     .sidebar {
@@ -902,6 +1029,45 @@ function ensureDesignerEngineLoaded(): Promise<void> {
       background: #f8fafc;
     }
 
+    .status-preview-card {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 12px;
+      border: 1px solid #dbe2ea;
+      border-radius: 8px;
+      background: #f8fafc;
+      min-height: 52px;
+    }
+
+    .status-preview-swatch {
+      width: 16px;
+      height: 16px;
+      border-radius: 999px;
+      flex: 0 0 auto;
+      box-shadow: 0 0 0 1px rgba(15, 23, 42, 0.08) inset;
+    }
+
+    .status-preview-copy {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      min-width: 0;
+    }
+
+    .status-preview-copy strong {
+      font-size: 13px;
+      color: #0f172a;
+      word-break: break-word;
+    }
+
+    .status-preview-copy small {
+      font-size: 11px;
+      color: #64748b;
+      text-transform: uppercase;
+      letter-spacing: 0;
+    }
+
     .multi-select {
       min-height: 112px;
     }
@@ -935,6 +1101,50 @@ function ensureDesignerEngineLoaded(): Promise<void> {
     .designer-panel {
       padding: 0;
       overflow: hidden;
+    }
+
+    .panel-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 0;
+    }
+
+    .panel-head h3 {
+      margin: 0;
+      font-size: 15px;
+      font-weight: 700;
+      color: #0f172a;
+    }
+
+    .panel-head-actions {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      color: #64748b;
+      font-size: 12px;
+    }
+
+    .panel-meta {
+      display: inline-block;
+      margin-top: 4px;
+      font-size: 12px;
+      color: #64748b;
+    }
+
+    .designer-panel-head {
+      padding: 16px;
+      border-bottom: 1px solid #e2e8f0;
+      background: #ffffff;
+    }
+
+    .inline-loading {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      color: #1d4ed8;
+      font-weight: 600;
     }
 
     .designer-toolbar {
@@ -1138,8 +1348,63 @@ function ensureDesignerEngineLoaded(): Promise<void> {
       line-height: 1.5;
     }
 
+    .collapsed-rail {
+      min-height: 760px;
+      padding: 12px 8px;
+      position: sticky;
+      top: 0;
+    }
+
+    .collapsed-sidebar-rail .collapsed-rail-head {
+      flex-direction: column;
+      justify-content: flex-start;
+      align-items: center;
+      gap: 16px;
+      min-height: 100%;
+    }
+
+    .collapsed-sidebar-rail .collapsed-rail-head h3 {
+      writing-mode: vertical-rl;
+      transform: rotate(180deg);
+      font-size: 13px;
+      color: #475569;
+      min-height: 180px;
+      text-align: center;
+    }
+
+    .workspace-loading-overlay {
+      position: absolute;
+      inset: 0;
+      z-index: 20;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      border-radius: 8px;
+      background: rgba(248, 250, 252, 0.88);
+      backdrop-filter: blur(4px);
+      color: #1e293b;
+      text-align: center;
+      pointer-events: all;
+    }
+
+    .workspace-loading-overlay strong {
+      font-size: 16px;
+      color: #0f172a;
+    }
+
+    .workspace-loading-overlay span:last-child {
+      font-size: 12px;
+      color: #64748b;
+    }
+
     @media (max-width: 1320px) {
       .workspace-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .workspace-grid.side-collapsed {
         grid-template-columns: 1fr;
       }
 
@@ -1180,6 +1445,17 @@ function ensureDesignerEngineLoaded(): Promise<void> {
       .canvas-shell {
         min-height: 620px;
       }
+
+      .collapsed-rail {
+        min-height: 120px;
+        position: static;
+      }
+
+      .collapsed-sidebar-rail .collapsed-rail-head h3 {
+        writing-mode: horizontal-tb;
+        transform: none;
+        min-height: 0;
+      }
     }
   `]
 })
@@ -1196,6 +1472,7 @@ export class WarehouseOptimizeDesignComponent implements AfterViewInit {
   readonly storageTypeOptions = STORAGE_TYPE_OPTIONS;
   readonly directionOptions = DIRECTION_OPTIONS;
   readonly modeOptions = MODE_OPTIONS;
+  readonly workingStatusFlowOptions = WORKING_STATUS_FLOW_OPTIONS;
 
   selectedProfileId: number | null = null;
   profileName = 'Main Shared Layout';
@@ -1209,9 +1486,11 @@ export class WarehouseOptimizeDesignComponent implements AfterViewInit {
   showLabels = false;
   showHeatmap = false;
   showAdvancedJson = false;
+  sidebarPanelsCollapsed = false;
   zoomPercent = 100;
   coordinatesText = 'X: -, Y: -';
   isSaving = false;
+  isGeneratingFromDb = false;
   saveState: SaveState = 'idle';
   saveStatusText = '';
 
@@ -1232,6 +1511,28 @@ export class WarehouseOptimizeDesignComponent implements AfterViewInit {
 
   get modeHint(): string {
     return MODE_HINTS[this.activeMode];
+  }
+
+  get showProfileLoading(): boolean {
+    if (this.state.designDraft()) {
+      return false;
+    }
+    return this.state.loadingProfiles() || this.state.loadingProfile();
+  }
+
+  get showWorkspaceBusy(): boolean {
+    return this.showProfileLoading || this.isGeneratingFromDb;
+  }
+
+  get workspaceBusyTitle(): string {
+    return this.isGeneratingFromDb ? 'Generating layout from DB' : 'Loading saved layout';
+  }
+
+  get workspaceBusyDetail(): string {
+    if (this.isGeneratingFromDb) {
+      return 'Reading warehouse master data and applying the generated draft. The designer is locked until this finishes.';
+    }
+    return 'Preparing the latest profile geometry for the designer.';
   }
 
   get utilizationPercent(): number {
@@ -1346,6 +1647,10 @@ export class WarehouseOptimizeDesignComponent implements AfterViewInit {
     }
   }
 
+  toggleSidebarPanels(): void {
+    this.sidebarPanelsCollapsed = !this.sidebarPanelsCollapsed;
+  }
+
   updateDraftMetadata(): void {
     this.persistDraftState();
   }
@@ -1366,13 +1671,52 @@ export class WarehouseOptimizeDesignComponent implements AfterViewInit {
     const nextHeight = clampWhole(this.warehouseHeight, 10, 500, 70);
     const hasContent = this.drawer?.hasDesignContent() ?? this.layout.aisles.length > 0;
 
-    if (hasContent && !window.confirm('Applying a new warehouse size will clear the current design. Continue?')) {
+    this.warehouseWidth = nextWidth;
+    this.warehouseHeight = nextHeight;
+
+    if (!hasContent) {
+      this.loadLayoutData(createEmptyLayout(nextWidth, nextHeight), true);
+      this.messageService.add({
+        severity: 'success',
+        summary: 'Warehouse size applied',
+        detail: `Updated empty warehouse to ${nextWidth} x ${nextHeight} m.`
+      });
       return;
     }
 
-    this.warehouseWidth = nextWidth;
-    this.warehouseHeight = nextHeight;
-    this.loadLayoutData(createEmptyLayout(nextWidth, nextHeight), true);
+    const shouldClearLayout = window.confirm(
+      'Apply new warehouse size?\n\nSelect OK to clear the current layout and apply the new size.\nSelect Cancel to keep the current layout and resize the warehouse from the right and top edges.'
+    );
+
+    if (shouldClearLayout) {
+      this.loadLayoutData(createEmptyLayout(nextWidth, nextHeight), true);
+      this.messageService.add({
+        severity: 'success',
+        summary: 'Warehouse resized',
+        detail: `Cleared the layout and resized the warehouse to ${nextWidth} x ${nextHeight} m.`
+      });
+      return;
+    }
+
+    if (this.drawer) {
+      const result = this.drawer.resizeWarehouseBounds(nextWidth, nextHeight);
+      this.captureDrawerState();
+      this.updateMinimap();
+      this.messageService.add({
+        severity: 'success',
+        summary: 'Warehouse resized',
+        detail: this.preservedResizeSummaryText(nextWidth, nextHeight, result)
+      });
+      return;
+    }
+
+    const resizedLayout = this.resizeLayoutPreservingContent(this.pendingLayoutData, nextWidth, nextHeight);
+    this.loadLayoutData(resizedLayout.layout, false);
+    this.messageService.add({
+      severity: 'success',
+      summary: 'Warehouse resized',
+      detail: this.preservedResizeSummaryText(nextWidth, nextHeight, resizedLayout.summary)
+    });
   }
 
   generateLayout(): void {
@@ -1393,6 +1737,52 @@ export class WarehouseOptimizeDesignComponent implements AfterViewInit {
       severity: 'success',
       summary: 'Starter layout generated',
       detail: 'You can keep drawing and adjusting zones directly on the canvas.'
+    });
+  }
+
+  generateLayoutFromDb(): void {
+    if (this.isGeneratingFromDb || this.isSaving) {
+      return;
+    }
+
+    if (this.hasDesignContent() &&
+      !window.confirm('Generate a draft from the warehouse DB and replace the current design?')) {
+      return;
+    }
+
+    this.isGeneratingFromDb = true;
+    this.setSaveStatus('saving', 'Generating layout from DB...');
+
+    this.service.generateLayoutFromDb().pipe(
+      finalize(() => {
+        this.isGeneratingFromDb = false;
+      })
+    ).subscribe({
+      next: response => {
+        this.loadLayoutData(response.layout, true);
+        this.setSaveStatus('dirty', 'Unsaved changes');
+        this.messageService.add({
+          severity: 'success',
+          summary: 'Layout generated from DB',
+          detail: this.generatedLayoutSummaryText(response)
+        });
+
+        if (response.warnings?.length) {
+          this.messageService.add({
+            severity: 'warn',
+            summary: 'Generation warnings',
+            detail: response.warnings[0]
+          });
+        }
+      },
+      error: error => {
+        this.setSaveStatus('error', 'Could not generate layout from DB');
+        this.messageService.add({
+          severity: 'error',
+          summary: 'Generation failed',
+          detail: this.saveErrorMessage(error)
+        });
+      }
     });
   }
 
@@ -1500,6 +1890,41 @@ export class WarehouseOptimizeDesignComponent implements AfterViewInit {
     this.propertyForm.pickFaceLevels = [];
   }
 
+  workingStatusOptions(flow: string): ReadonlyArray<{ flow: 'INBOUND' | 'OUTBOUND'; code: string; label: string; color: string }> {
+    return workingStatusOptionsForFlow(flow);
+  }
+
+  updateWorkingStatusFlow(flow: string): void {
+    this.propertyForm.workingStatusFlow = (flow || 'OUTBOUND').toUpperCase();
+    const selected =
+      workingStatusDefinition(this.propertyForm.workingStatusFlow, this.propertyForm.workingStatusCode)
+      ?? workingStatusOptionsForFlow(this.propertyForm.workingStatusFlow)[0];
+    if (!selected) {
+      this.propertyForm.workingStatusCode = '';
+      this.propertyForm.workingStatusLabel = '';
+      this.propertyForm.workingStatusColor = '#0EA5E9';
+      return;
+    }
+    this.propertyForm.workingStatusCode = selected.code;
+    this.propertyForm.workingStatusLabel = selected.label;
+    this.propertyForm.workingStatusColor = selected.color;
+  }
+
+  updateWorkingStatusCode(code: string): void {
+    const selected =
+      workingStatusDefinition(this.propertyForm.workingStatusFlow, code)
+      ?? workingStatusOptionsForFlow(this.propertyForm.workingStatusFlow)[0];
+    if (!selected) {
+      this.propertyForm.workingStatusCode = '';
+      this.propertyForm.workingStatusLabel = '';
+      this.propertyForm.workingStatusColor = '#0EA5E9';
+      return;
+    }
+    this.propertyForm.workingStatusCode = selected.code;
+    this.propertyForm.workingStatusLabel = selected.label;
+    this.propertyForm.workingStatusColor = selected.color;
+  }
+
   applyProperties(): void {
     if (!this.drawer?.selectedAisle) {
       return;
@@ -1511,11 +1936,28 @@ export class WarehouseOptimizeDesignComponent implements AfterViewInit {
     const pickFaceLevels = (this.propertyForm.pickFaceLevels.length > 0 ? this.propertyForm.pickFaceLevels : [1])
       .map(value => clampWhole(value, 1, levels, 1))
       .sort((left, right) => left - right);
+    const workingStatusType = this.propertyForm.type === 'WORKING_STATUS';
+    const selectedWorkingStatus = workingStatusType
+      ? workingStatusDefinition(this.propertyForm.workingStatusFlow, this.propertyForm.workingStatusCode)
+      : undefined;
+
+    if (workingStatusType && !selectedWorkingStatus) {
+      this.messageService.add({
+        severity: 'warn',
+        summary: 'System status required',
+        detail: 'Choose the inbound or outbound system status for this working-status zone.'
+      });
+      return;
+    }
 
     this.drawer.selectedAisle.updateProperties({
       zone: this.propertyForm.zone.trim() || this.drawer.selectedAisle.zone,
       type: this.propertyForm.type,
       direction: this.propertyForm.direction,
+      workingStatusFlow: workingStatusType ? selectedWorkingStatus?.flow ?? null : null,
+      workingStatusCode: workingStatusType ? selectedWorkingStatus?.code ?? null : null,
+      workingStatusLabel: workingStatusType ? selectedWorkingStatus?.label ?? null : null,
+      workingStatusColor: workingStatusType ? selectedWorkingStatus?.color ?? null : null,
       levels,
       tunnelLevelFrom: tunnelFrom,
       tunnelLevelTo: tunnelTo,
@@ -1526,6 +1968,9 @@ export class WarehouseOptimizeDesignComponent implements AfterViewInit {
       startPointX: clampFloat(this.propertyForm.startPointX, 0, 9999, this.drawer.selectedAisle.x),
       startPointY: clampFloat(this.propertyForm.startPointY, 0, 9999, this.drawer.selectedAisle.y)
     });
+    this.drawer.selectedAisle.x = Math.max(0, Math.min(this.drawer.warehouseWidth - this.drawer.selectedAisle.width, this.drawer.selectedAisle.x));
+    this.drawer.selectedAisle.y = Math.max(0, Math.min(this.drawer.warehouseHeight - this.drawer.selectedAisle.height, this.drawer.selectedAisle.y));
+    this.drawer.selectedAisle.generateLocations();
     this.drawer.applyConstraintFiltering();
     this.drawer.saveState();
     this.drawer.render();
@@ -1900,10 +2345,18 @@ export class WarehouseOptimizeDesignComponent implements AfterViewInit {
   }
 
   private patchPropertyForm(aisle: WarehouseAisle): void {
+    const selectedWorkingStatus =
+      workingStatusDefinition(aisle.workingStatusFlow, aisle.workingStatusCode)
+      ?? workingStatusOptionsForFlow(aisle.workingStatusFlow ?? 'OUTBOUND')[0]
+      ?? workingStatusOptionsForFlow('OUTBOUND')[0];
     this.propertyForm = {
       zone: aisle.zone,
       type: aisle.type,
       direction: aisle.direction ?? 'AUTO',
+      workingStatusFlow: (aisle.workingStatusFlow ?? selectedWorkingStatus?.flow ?? 'OUTBOUND').toUpperCase(),
+      workingStatusCode: aisle.workingStatusCode ?? selectedWorkingStatus?.code ?? '',
+      workingStatusLabel: aisle.workingStatusLabel ?? selectedWorkingStatus?.label ?? '',
+      workingStatusColor: aisle.workingStatusColor ?? selectedWorkingStatus?.color ?? '#0EA5E9',
       levels: aisle.levels,
       tunnelLevelFrom: aisle.tunnelLevelFrom ?? 1,
       tunnelLevelTo: aisle.tunnelLevelTo ?? aisle.levels,
@@ -1914,6 +2367,9 @@ export class WarehouseOptimizeDesignComponent implements AfterViewInit {
       startPointX: aisle.startPointX ?? aisle.x,
       startPointY: aisle.startPointY ?? aisle.y
     };
+    if (this.propertyForm.type === 'WORKING_STATUS') {
+      this.updateWorkingStatusCode(this.propertyForm.workingStatusCode);
+    }
   }
 
   private snapshotLayoutData(): WarehouseDesignerLayout {
@@ -2060,6 +2516,10 @@ export class WarehouseOptimizeDesignComponent implements AfterViewInit {
       zone: '',
       type: 'HIGH_RACK',
       direction: 'AUTO',
+      workingStatusFlow: 'OUTBOUND',
+      workingStatusCode: '300',
+      workingStatusLabel: 'Allocated',
+      workingStatusColor: '#1A005D',
       levels: 4,
       tunnelLevelFrom: 1,
       tunnelLevelTo: 4,
@@ -2092,6 +2552,135 @@ export class WarehouseOptimizeDesignComponent implements AfterViewInit {
   private setSaveStatus(state: SaveState, text: string): void {
     this.saveState = state;
     this.saveStatusText = text;
+  }
+
+  private hasDesignContent(): boolean {
+    return this.drawer?.hasDesignContent() ?? this.layout.aisles.length > 0;
+  }
+
+  private resizeLayoutPreservingContent(
+    layout: WarehouseDesignerLayout,
+    width: number,
+    height: number
+  ): {
+    layout: WarehouseDesignerLayout;
+    summary: { movedAisles: number; resizedAisles: number; adjustedBoundaryPoints: number };
+  } {
+    const normalized = normalizeLayout(layout);
+    let movedAisles = 0;
+    let resizedAisles = 0;
+    let adjustedBoundaryPoints = 0;
+
+    const aisles = normalized.aisles.map(aisle => {
+      let changed = false;
+      let resized = false;
+      const nextAisle: WarehouseAisle = {
+        ...aisle,
+        locations: aisle.locations.map(location => ({ ...location })),
+        baseLocations: aisle.baseLocations?.map(location => ({ ...location })) ?? null,
+        pickFaceLevels: aisle.pickFaceLevels ? [...aisle.pickFaceLevels] : null
+      };
+
+      if (nextAisle.width > width) {
+        nextAisle.width = width;
+        resized = true;
+        changed = true;
+      }
+
+      if (nextAisle.height > height) {
+        nextAisle.height = height;
+        resized = true;
+        changed = true;
+      }
+
+      const maxX = Math.max(0, width - nextAisle.width);
+      const maxY = Math.max(0, height - nextAisle.height);
+      const clampedX = Math.max(0, Math.min(maxX, nextAisle.x));
+      const clampedY = Math.max(0, Math.min(maxY, nextAisle.y));
+
+      if (clampedX !== nextAisle.x || clampedY !== nextAisle.y) {
+        nextAisle.x = clampedX;
+        nextAisle.y = clampedY;
+        movedAisles += 1;
+        changed = true;
+      }
+
+      if (resized) {
+        resizedAisles += 1;
+      }
+
+      if (changed) {
+        nextAisle.locations = nextAisle.locations.map(location => ({
+          ...location,
+          x: location.x === null ? null : Math.max(0, Math.min(width, nextAisle.x + ((location.x ?? nextAisle.x) - aisle.x))),
+          y: location.y === null ? null : Math.max(0, Math.min(height, nextAisle.y + ((location.y ?? nextAisle.y) - aisle.y)))
+        }));
+      }
+
+      return nextAisle;
+    });
+
+    const boundaryPolygon = normalized.boundaryPolygon?.map(point => {
+      const clampedPoint = {
+        x: Math.max(0, Math.min(width, point.x)),
+        y: Math.max(0, Math.min(height, point.y))
+      };
+      if (clampedPoint.x !== point.x || clampedPoint.y !== point.y) {
+        adjustedBoundaryPoints += 1;
+      }
+      return clampedPoint;
+    }) ?? null;
+
+    return {
+      layout: {
+        ...normalized,
+        warehouseWidth: width,
+        warehouseHeight: height,
+        boundaryPolygon,
+        aisles
+      },
+      summary: {
+        movedAisles,
+        resizedAisles,
+        adjustedBoundaryPoints
+      }
+    };
+  }
+
+  private preservedResizeSummaryText(
+    width: number,
+    height: number,
+    result?: { movedAisles?: number; resizedAisles?: number; adjustedBoundaryPoints?: number }
+  ): string {
+    const messages = [`Kept the current layout and resized the warehouse to ${width} x ${height} m.`];
+    if ((result?.movedAisles ?? 0) > 0) {
+      messages.push(`${result?.movedAisles} zone${result?.movedAisles === 1 ? '' : 's'} were moved inside the new bounds.`);
+    }
+    if ((result?.resizedAisles ?? 0) > 0) {
+      messages.push(`${result?.resizedAisles} zone${result?.resizedAisles === 1 ? '' : 's'} were reduced to fit.`);
+    }
+    if ((result?.adjustedBoundaryPoints ?? 0) > 0) {
+      messages.push(`${result?.adjustedBoundaryPoints} boundary point${result?.adjustedBoundaryPoints === 1 ? '' : 's'} were clamped to the new size.`);
+    }
+    return messages.join(' ');
+  }
+
+  private generatedLayoutSummaryText(response: {
+    summary: {
+      areas: number;
+      racks: number;
+      locations: number;
+      inferredPositions: number;
+      inferredLevels: number;
+      skippedRows: number;
+    };
+  }): string {
+    const { summary } = response;
+    let detail = `${summary.areas} areas, ${summary.racks} racks, and ${summary.locations} locations loaded into the draft.`;
+    if (summary.inferredPositions > 0 || summary.inferredLevels > 0 || summary.skippedRows > 0) {
+      detail += ` ${summary.inferredPositions} positions inferred, ${summary.inferredLevels} levels inferred, ${summary.skippedRows} rows skipped.`;
+    }
+    return detail;
   }
 
   private savedMessage(updatedAt: string | null | undefined): string {
@@ -2156,6 +2745,8 @@ function colorForAisleType(type: string): string {
       return 'rgba(249, 115, 22, 0.65)';
     case 'STAGING':
       return 'rgba(20, 184, 166, 0.7)';
+    case 'WORKING_STATUS':
+      return 'rgba(14, 165, 233, 0.7)';
     case 'OBSTACLE':
     case 'PILLAR':
       return 'rgba(100, 116, 139, 0.75)';

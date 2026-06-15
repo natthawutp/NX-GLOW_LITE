@@ -24,64 +24,64 @@ import java.util.Map;
 public class InboundOrderRegistrationRepository {
 
     private static final String[] SUPPLIER_SOURCES = {
-        "SGWH0001.GWH_TM_SPL",
+        "GWH.GWH_TM_SPL",
         "GWH_TM_SPL"
     };
 
     private static final String[] PRODUCT_SOURCES = {
-        "SGWH0001.GWH_TM_PROD",
+        "GWH.GWH_TM_PROD",
         "GWH_TM_PROD",
-        "SGWH0001.GWH_TM_PRD",
+        "GWH.GWH_TM_PRD",
         "GWH_TM_PRD"
     };
 
     private static final String[] ORIGIN_SOURCES = {
-        "SGWH0001.GWH_TM_ORG",
-        "SGWH0001.GWH_TM_ORGN",
+        "GWH.GWH_TM_ORG",
+        "GWH.GWH_TM_ORGN",
         "GWH_TM_ORG",
         "GWH_TM_ORGN"
     };
 
     private static final String[] TRN_SOURCES = {
-        "SGWH0001.VGWH_TM_TRN",
+        "GWH.VGWH_TM_TRN",
         "VGWH_TM_TRN",
-        "SGWH0001.GWH_TM_TRN",
+        "GWH.GWH_TM_TRN",
         "GWH_TM_TRN"
     };
 
     private static final String[] PIK_SOURCES = {
-        "SGWH0001.VGWH_TM_PIK",
+        "GWH.VGWH_TM_PIK",
         "VGWH_TM_PIK",
-        "SGWH0001.GWH_TM_PIK",
+        "GWH.GWH_TM_PIK",
         "GWH_TM_PIK"
     };
 
     private static final String[] CODE_SOURCES = {
-        "SGWH0001.VGWH_TM_CODE",
+        "GWH.VGWH_TM_CODE",
         "VGWH_TM_CODE",
-        "SGWH0001.GWH_TM_CODE",
+        "GWH.GWH_TM_CODE",
         "GWH_TM_CODE"
     };
 
     private static final String[] PRCC_SOURCES = {
-        "SGWH0001.VGWH_TM_PRCC",
+        "GWH.VGWH_TM_PRCC",
         "VGWH_TM_PRCC",
-        "SGWH0001.GWH_TM_PRCC",
+        "GWH.GWH_TM_PRCC",
         "GWH_TM_PRCC"
     };
 
     private static final String[] XT_SOURCES = {
-        "SGWH0001.GWH_TJ_XT",
+        "GWH.GWH_TJ_XT",
         "GWH_TJ_XT"
     };
 
     private static final String[] XT_KPI_SOURCES = {
-        "SGWH0001.GWH_TJ_XT_KPI",
+        "GWH.GWH_TJ_XT_KPI",
         "GWH_TJ_XT_KPI"
     };
 
     private static final String[] XT_KPI_SEQUENCES = {
-        "SGWH0001.SEQGWH_TJ_XT_KPI",
+        "GWH.SEQGWH_TJ_XT_KPI",
         "SEQGWH_TJ_XT_KPI"
     };
 
@@ -94,7 +94,7 @@ public class InboundOrderRegistrationRepository {
     private EntityManager em;
 
     public boolean existsArrivalNumber(String companyCode, String warehouseCode, String customerCode, String arrivalNumber) {
-        String sql = "SELECT COUNT(*) FROM SGWH0001.GWH_TJ_AV_H " +
+        String sql = "SELECT COUNT(*) FROM GWH.GWH_TJ_AV_H " +
                 "WHERE AVH_CPNY_COD = :cpny AND AVH_WHS_COD = :whs AND AVH_CUST_COD = :cust " +
                 "AND AVH_AV_NUM = :arrivalNo AND DEL_FLG = 0";
         Query query = em.createNativeQuery(sql);
@@ -111,7 +111,7 @@ public class InboundOrderRegistrationRepository {
         if (trimToNull(referenceNumber) == null) {
             return false;
         }
-        String sql = "SELECT COUNT(*) FROM SGWH0001.GWH_TJ_AV_H " +
+        String sql = "SELECT COUNT(*) FROM GWH.GWH_TJ_AV_H " +
                 "WHERE AVH_CPNY_COD = :cpny AND AVH_WHS_COD = :whs AND AVH_CUST_COD = :cust " +
                 "AND AVH_RF_NUM = :rfNo AND DEL_FLG = 0";
         Query query = em.createNativeQuery(sql);
@@ -127,7 +127,7 @@ public class InboundOrderRegistrationRepository {
         if (trimToNull(poNumber) == null) {
             return false;
         }
-        String sql = "SELECT COUNT(*) FROM SGWH0001.GWH_TJ_AV_H " +
+        String sql = "SELECT COUNT(*) FROM GWH.GWH_TJ_AV_H " +
                 "WHERE AVH_CPNY_COD = :cpny AND AVH_WHS_COD = :whs AND AVH_CUST_COD = :cust " +
                 "AND AVH_PO_NUM = :poNo AND DEL_FLG = 0";
         Query query = em.createNativeQuery(sql);
@@ -550,7 +550,7 @@ public class InboundOrderRegistrationRepository {
             String userCode,
             String programCode
     ) {
-        String sql = "INSERT INTO SGWH0001.GWH_TJ_AV_H (" +
+        String sql = "INSERT INTO GWH.GWH_TJ_AV_H (" +
                 "CRT_YMD, CRT_TIM, CRT_TMID, CRT_USER, CRT_PGM, CRT_TM_ZONE, CRT_YMDHMS, CRT_L_YMDHMS, " +
                 "UPD_YMD, UPD_TIM, UPD_TMID, UPD_USER, UPD_PGM, UPD_TM_ZONE, UPD_YMDHMS, UPD_L_YMDHMS, " +
                 "AVH_CPNY_COD, AVH_WHS_COD, AVH_CUST_COD, AVH_AV_NUM, AVH_SCDL_YMD, AVH_TRN_KND, AVH_AV_STS, " +
@@ -629,7 +629,7 @@ public class InboundOrderRegistrationRepository {
             String userCode,
             String programCode
         ) {
-        String sql = "INSERT INTO SGWH0001.GWH_TJ_AV_D (" +
+        String sql = "INSERT INTO GWH.GWH_TJ_AV_D (" +
             "CRT_YMD, CRT_TIM, CRT_TMID, CRT_USER, CRT_PGM, CRT_TM_ZONE, CRT_YMDHMS, CRT_L_YMDHMS, " +
             "UPD_YMD, UPD_TIM, UPD_TMID, UPD_USER, UPD_PGM, UPD_TM_ZONE, UPD_YMDHMS, UPD_L_YMDHMS, " +
             "AVD_CPNY_COD, AVD_WHS_COD, AVD_CUST_COD, AVD_AV_NUM, AVD_AVLN_NUM, AVD_AV_STS, AVD_INSP_STS, " +
@@ -724,7 +724,7 @@ public class InboundOrderRegistrationRepository {
     public String findCurrentStatus(
             String companyCode, String warehouseCode, String customerCode, String arrivalNumber) {
 
-        String sql = "SELECT AVH_AV_STS FROM SGWH0001.GWH_TJ_AV_H " +
+        String sql = "SELECT AVH_AV_STS FROM GWH.GWH_TJ_AV_H " +
             "WHERE AVH_CPNY_COD = :cpny AND AVH_WHS_COD = :whs AND AVH_CUST_COD = :cust " +
             "AND AVH_AV_NUM = :avNum AND DEL_FLG = '0'";
 
@@ -750,7 +750,7 @@ public class InboundOrderRegistrationRepository {
             String companyCode, String warehouseCode, String customerCode,
             String arrivalNumber, String expectedTimestamp) {
 
-        String sql = "SELECT COUNT(*) FROM SGWH0001.GWH_TJ_AV_H " +
+        String sql = "SELECT COUNT(*) FROM GWH.GWH_TJ_AV_H " +
             "WHERE AVH_CPNY_COD = :cpny AND AVH_WHS_COD = :whs AND AVH_CUST_COD = :cust " +
             "AND AVH_AV_NUM = :avNum AND DEL_FLG = '0' " +
             "AND TO_CHAR(UPD_YMDHMS, 'YYYY-MM-DD HH24:MI:SS.FF3') = :expectedTs";
@@ -778,7 +778,7 @@ public class InboundOrderRegistrationRepository {
         LocalTime nowTime = LocalTime.now();
         LocalDateTime nowDateTime = LocalDateTime.now();
 
-        String sql = "UPDATE SGWH0001.GWH_TJ_AV_H SET " +
+        String sql = "UPDATE GWH.GWH_TJ_AV_H SET " +
             "AVH_SCDL_YMD = :scheduleDate, AVH_TRN_KND = :trnKind, " +
             "AVH_PO_NUM = :poNo, AVH_RF_NUM = :refNo, AVH_RMKS = :remarks, " +
             "AVH_SPL_COD = :supplierCode, AVH_SPL_NAM1 = :supplierName, " +
@@ -831,7 +831,7 @@ public class InboundOrderRegistrationRepository {
         LocalTime nowTime = LocalTime.now();
         LocalDateTime nowDateTime = LocalDateTime.now();
 
-        String sql = "UPDATE SGWH0001.GWH_TJ_AV_D SET DEL_FLG = '1', " +
+        String sql = "UPDATE GWH.GWH_TJ_AV_D SET DEL_FLG = '1', " +
             "UPD_YMD = :updYmd, UPD_TIM = :updTim, UPD_TMID = :updTmid, " +
             "UPD_USER = :updUser, UPD_PGM = :updPgm, UPD_TM_ZONE = 'JST', " +
             "UPD_YMDHMS = :updYmdhms, UPD_L_YMDHMS = :updLocalYmdhms " +
@@ -870,7 +870,7 @@ public class InboundOrderRegistrationRepository {
             String userCode, String programCode) {
 
         String sql =
-            "MERGE INTO SGWH0001.GWH_TJ_AV_D t " +
+            "MERGE INTO GWH.GWH_TJ_AV_D t " +
             "USING (SELECT :cpny AS CPNY, :whs AS WHS, :cust AS CUST, " +
             "  :arrivalNo AS AV_NUM, :lineNo AS AVLN_NUM FROM DUAL) s " +
             "ON (t.AVD_CPNY_COD = s.CPNY AND t.AVD_WHS_COD = s.WHS " +
@@ -1011,7 +1011,7 @@ public class InboundOrderRegistrationRepository {
         LocalTime nowTime = LocalTime.now();
         LocalDateTime nowDateTime = LocalDateTime.now();
 
-        String sql = "UPDATE SGWH0001.GWH_TJ_AV_D SET DEL_FLG = '1', " +
+        String sql = "UPDATE GWH.GWH_TJ_AV_D SET DEL_FLG = '1', " +
             "UPD_YMD = :updYmd, UPD_TIM = :updTim, UPD_TMID = :updTmid, " +
             "UPD_USER = :updUser, UPD_PGM = :updPgm, UPD_TM_ZONE = 'JST', " +
             "UPD_YMDHMS = :updYmdhms, UPD_L_YMDHMS = :updLocalYmdhms " +

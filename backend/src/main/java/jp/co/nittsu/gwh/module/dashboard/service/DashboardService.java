@@ -35,12 +35,12 @@ public class DashboardService {
     private TenantContext tenantContext;
 
         private static final String[] XT_SOURCES = {
-            "SGWH0001.GWH_TJ_XT",
+            "GWH.GWH_TJ_XT",
             "GWH_TJ_XT"
         };
 
         private static final String[] XT_KPI_SOURCES = {
-            "SGWH0001.GWH_TJ_XT_KPI",
+            "GWH.GWH_TJ_XT_KPI",
             "GWH_TJ_XT_KPI"
         };
 
@@ -372,21 +372,21 @@ public class DashboardService {
     }
 
     private long countTodayInbound(String cpny, String whs, String cust) {
-        String sql = "SELECT COUNT(*) FROM SGWH0001.VGWH_TJ_AV_H " +
+        String sql = "SELECT COUNT(*) FROM GWH.VGWH_TJ_AV_H " +
                         "WHERE AVH_CPNY_COD = :cpny AND AVH_WHS_COD = :whs AND AVH_CUST_COD = :cust " +
                      "AND TRUNC(AVH_SCDL_YMD) = TRUNC(SYSDATE) AND DEL_FLG = 0";
         return executeCountQuery(sql, cpny, whs, cust);
     }
 
     private long countTodayOutbound(String cpny, String whs, String cust) {
-        String sql = "SELECT COUNT(*) FROM SGWH0001.VGWH_TJ_SP_H " +
+        String sql = "SELECT COUNT(*) FROM GWH.VGWH_TJ_SP_H " +
                         "WHERE SPH_CPNY_COD = :cpny AND SPH_WHS_COD = :whs AND SPH_CUST_COD = :cust " +
                      "AND TRUNC(SPH_SCDL_YMD) = TRUNC(SYSDATE) AND DEL_FLG = 0";
         return executeCountQuery(sql, cpny, whs, cust);
     }
 
     private long countTotalSkus(String cpny, String whs, String cust) {
-        String sql = "SELECT COUNT(DISTINCT PROD_COD) FROM SGWH0001.VGWH_TM_PROD " +
+        String sql = "SELECT COUNT(DISTINCT PROD_COD) FROM GWH.VGWH_TM_PROD " +
                         "WHERE PROD_CPNY_COD = :cpny AND PROD_WHS_COD = :whs AND PROD_CUST_COD = :cust " +
                      "AND DEL_FLG = 0";
         return executeCountQuery(sql, cpny, whs, cust);
@@ -398,7 +398,7 @@ public class DashboardService {
 
     private List<StatusCount> getInboundStatusCounts(String cpny, String whs, String cust, Map<String, String> statusLabels) {
         try {
-            String sql = "SELECT AVH_AV_STS, COUNT(*) AS CNT FROM SGWH0001.VGWH_TJ_AV_H " +
+            String sql = "SELECT AVH_AV_STS, COUNT(*) AS CNT FROM GWH.VGWH_TJ_AV_H " +
                              "WHERE AVH_CPNY_COD = :cpny AND AVH_WHS_COD = :whs AND AVH_CUST_COD = :cust " +
                          "AND DEL_FLG = 0 " +
                          "GROUP BY AVH_AV_STS ORDER BY AVH_AV_STS";
@@ -437,7 +437,7 @@ public class DashboardService {
 
     private List<StatusCount> getOutboundStatusCounts(String cpny, String whs, String cust, Map<String, String> statusLabels) {
         try {
-            String sql = "SELECT SPH_SP_STS, COUNT(*) AS CNT FROM SGWH0001.VGWH_TJ_SP_H " +
+            String sql = "SELECT SPH_SP_STS, COUNT(*) AS CNT FROM GWH.VGWH_TJ_SP_H " +
                              "WHERE SPH_CPNY_COD = :cpny AND SPH_WHS_COD = :whs AND SPH_CUST_COD = :cust " +
                          "AND DEL_FLG = 0 " +
                          "GROUP BY SPH_SP_STS ORDER BY SPH_SP_STS";
@@ -471,7 +471,7 @@ public class DashboardService {
     }
 
     // ========================================================================
-    // Recent Activities — last 10 inbound/outbound transactions by UPD_YMDHMS
+    // Recent Activities โ€” last 10 inbound/outbound transactions by UPD_YMDHMS
     // ========================================================================
 
     private List<ActivityItem> getRecentActivities(String cpny, String whs, String cust) {
@@ -483,7 +483,7 @@ public class DashboardService {
                 "    'Arrival ' || AVH_AV_NUM || ' - Status: ' || AVH_AV_STS AS DESCRIPTION, " +
                 "    NVL(UPD_USER, CRT_USER) AS ACT_USER, " +
                 "    UPD_YMDHMS AS ACT_TS " +
-                    "  FROM SGWH0001.VGWH_TJ_AV_H " +
+                    "  FROM GWH.VGWH_TJ_AV_H " +
                 "  WHERE AVH_CPNY_COD = :cpny AND AVH_WHS_COD = :whs AND AVH_CUST_COD = :cust " +
                 "    AND DEL_FLG = 0 " +
                 "  UNION ALL " +
@@ -491,7 +491,7 @@ public class DashboardService {
                 "    'Shipment ' || SPH_SP_NUM || ' - Status: ' || SPH_SP_STS AS DESCRIPTION, " +
                 "    NVL(UPD_USER, CRT_USER) AS ACT_USER, " +
                 "    UPD_YMDHMS AS ACT_TS " +
-                    "  FROM SGWH0001.VGWH_TJ_SP_H " +
+                    "  FROM GWH.VGWH_TJ_SP_H " +
                 "  WHERE SPH_CPNY_COD = :cpny AND SPH_WHS_COD = :whs AND SPH_CUST_COD = :cust " +
                 "    AND DEL_FLG = 0 " +
                 ") ORDER BY ACT_TS DESC FETCH FIRST 10 ROWS ONLY";
@@ -545,14 +545,14 @@ public class DashboardService {
     }
 
     // ========================================================================
-    // Warehouse Utilization — total locations vs locations holding stock
+    // Warehouse Utilization โ€” total locations vs locations holding stock
     // ========================================================================
 
     private WarehouseUtilization getWarehouseUtil(String cpny, String whs, String cust) {
         WarehouseUtilization util = new WarehouseUtilization();
         try {
             // Total locations (location master is company+warehouse level, no customer key)
-            String sqlTotal = "SELECT COUNT(*) FROM SGWH0001.VGWH_TM_LOC " +
+            String sqlTotal = "SELECT COUNT(*) FROM GWH.VGWH_TM_LOC " +
                                   "WHERE LOC_CPNY_COD = :cpny AND LOC_WHS_COD = :whs AND DEL_FLG = 0";
             Query qTotal = em.createNativeQuery(sqlTotal);
             qTotal.setParameter("cpny", cpny);
@@ -560,7 +560,7 @@ public class DashboardService {
             long total = toLong(qTotal.getSingleResult());
 
             // Occupied stock rows (schema-safe fallback across tenants/views)
-            String sqlUsed = "SELECT COUNT(*) FROM SGWH0001.VGWH_TJ_ST " +
+            String sqlUsed = "SELECT COUNT(*) FROM GWH.VGWH_TJ_ST " +
                                  "WHERE ST_CPNY_COD = :cpny AND ST_WHS_COD = :whs AND ST_CUST_COD = :cust " +
                              "AND DEL_FLG = 0";
             Query qUsed = em.createNativeQuery(sqlUsed);
@@ -582,7 +582,7 @@ public class DashboardService {
     }
 
     // ========================================================================
-    // Alerts — overdue shipments, pending inbound, low-stock indicators
+    // Alerts โ€” overdue shipments, pending inbound, low-stock indicators
     // ========================================================================
 
     private List<AlertItem> getAlerts(String cpny, String whs, String cust) {
@@ -592,7 +592,7 @@ public class DashboardService {
 
         try {
             // 1. Overdue outbound shipments (scheduled date < today, not yet shipped/cancelled)
-                String sqlOverdue = "SELECT COUNT(*) FROM SGWH0001.VGWH_TJ_SP_H " +
+                String sqlOverdue = "SELECT COUNT(*) FROM GWH.VGWH_TJ_SP_H " +
                     "WHERE SPH_CPNY_COD = :cpny AND SPH_WHS_COD = :whs AND SPH_CUST_COD = :cust " +
                     "AND TRUNC(SPH_SCDL_YMD) < TRUNC(SYSDATE) " +
                     "AND SPH_SP_STS NOT IN ('609', '999') " +
@@ -607,8 +607,8 @@ public class DashboardService {
                 alerts.add(a);
             }
 
-            // 2. Pending inbound (arrivals with early status codes — not yet confirmed)
-                String sqlPending = "SELECT COUNT(*) FROM SGWH0001.VGWH_TJ_AV_H " +
+            // 2. Pending inbound (arrivals with early status codes โ€” not yet confirmed)
+                String sqlPending = "SELECT COUNT(*) FROM GWH.VGWH_TJ_AV_H " +
                     "WHERE AVH_CPNY_COD = :cpny AND AVH_WHS_COD = :whs AND AVH_CUST_COD = :cust " +
                     "AND AVH_AV_STS < '209' " +
                     "AND DEL_FLG = 0";
@@ -627,7 +627,7 @@ public class DashboardService {
             if (alerts.isEmpty()) {
                 AlertItem ok = new AlertItem();
                 ok.setSeverity("INFO");
-                ok.setMessage("All operations running smoothly — no issues detected");
+                ok.setMessage("All operations running smoothly โ€” no issues detected");
                 ok.setModule("System");
                 ok.setTimestamp(now);
                 alerts.add(ok);
@@ -669,7 +669,7 @@ public class DashboardService {
         Map<String, LabelCandidate> bestByCode = new HashMap<>();
         try {
             String sql = "SELECT STS_CPNY_COD, STS_WHS_COD, STS_CUST_COD, STS_COD, STS_BSNS_COD, STS_LBL_COD, STS_RMKS " +
-                    "FROM SGWH0001.GWH_TM_STS " +
+                    "FROM GWH.GWH_TM_STS " +
                     "WHERE STS_CPNY_COD IN (:cpny, '000000000000', '*') " +
                     "AND STS_WHS_COD IN (:whs, '00000000', '*') " +
                     "AND STS_CUST_COD IN (:cust, '00000000000000000000000000', '*') " +

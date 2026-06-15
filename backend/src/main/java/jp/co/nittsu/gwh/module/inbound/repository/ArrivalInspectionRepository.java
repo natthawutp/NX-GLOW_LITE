@@ -47,13 +47,13 @@ public class ArrivalInspectionRepository {
         sql.append(
             "SELECT h.AVH_AV_NUM, h.AVH_AV_STS, NVL(h.AVH_SPL_NAM1, h.AVH_SPL_COD), h.AVH_SPL_COD, " +
             "h.AVH_PO_NUM, h.AVH_TRN_KND, h.AVH_SCDL_YMD, h.AVH_ARV_YMD, h.AVH_RMKS, h.UPD_YMDHMS, " +
-            "(SELECT COUNT(*) FROM SGWH0001.GWH_TJ_AV_D d " +
+            "(SELECT COUNT(*) FROM GWH.GWH_TJ_AV_D d " +
             "  WHERE d.AVD_CPNY_COD = h.AVH_CPNY_COD AND d.AVD_WHS_COD = h.AVH_WHS_COD " +
             "  AND d.AVD_CUST_COD = h.AVH_CUST_COD AND d.AVD_AV_NUM = h.AVH_AV_NUM AND d.DEL_FLG = '0') AS TOTAL_LINES, " +
-            "(SELECT COUNT(*) FROM SGWH0001.GWH_TJ_AV_R r " +
+            "(SELECT COUNT(*) FROM GWH.GWH_TJ_AV_R r " +
             "  WHERE r.AVR_CPNY_COD = h.AVH_CPNY_COD AND r.AVR_WHS_COD = h.AVH_WHS_COD " +
             "  AND r.AVR_CUST_COD = h.AVH_CUST_COD AND r.AVR_AS_NUM = h.AVH_AV_NUM AND r.DEL_FLG = '0') AS INSP_LINES " +
-            "FROM SGWH0001.GWH_TJ_AV_H h " +
+            "FROM GWH.GWH_TJ_AV_H h " +
             "WHERE h.AVH_CPNY_COD = :cpny AND h.AVH_WHS_COD = :whs AND h.AVH_CUST_COD = :cust " +
             "  AND h.DEL_FLG = '0' AND h.AVH_AV_STS IN " + INSPECTABLE_STATUS_IN
         );
@@ -127,11 +127,11 @@ public class ArrivalInspectionRepository {
             "  d.AVD_ORGN_COD, h.AVH_TRN_KND, " +
             "  d.AVD_PIK1, d.AVD_PIK2, d.AVD_PIK3, d.AVD_PIK4, d.AVD_PIK5, d.AVD_PIK6, d.AVD_PIK7, " +
             "  d.AVD_DMG_FLG " +
-            "FROM SGWH0001.GWH_TJ_AV_D d " +
-            "INNER JOIN SGWH0001.GWH_TJ_AV_H h " +
+            "FROM GWH.GWH_TJ_AV_D d " +
+            "INNER JOIN GWH.GWH_TJ_AV_H h " +
             "  ON h.AVH_CPNY_COD = d.AVD_CPNY_COD AND h.AVH_WHS_COD = d.AVD_WHS_COD " +
             "  AND h.AVH_CUST_COD = d.AVD_CUST_COD AND h.AVH_AV_NUM = d.AVD_AV_NUM AND h.DEL_FLG = '0' " +
-            "LEFT JOIN SGWH0001.GWH_TJ_AV_R r " +
+            "LEFT JOIN GWH.GWH_TJ_AV_R r " +
             "  ON r.AVR_CPNY_COD = d.AVD_CPNY_COD AND r.AVR_WHS_COD = d.AVD_WHS_COD " +
             "  AND r.AVR_CUST_COD = d.AVD_CUST_COD AND r.AVR_AS_NUM = d.AVD_AV_NUM " +
             "  AND r.AVR_ASLN_NUM = d.AVD_AVLN_NUM AND r.AVR_ASSQ_NUM = 1 AND r.DEL_FLG = '0' " +
@@ -207,7 +207,7 @@ public class ArrivalInspectionRepository {
     }
 
     // ---------------------------------------------------------------------------
-    // Write operations — performed inside service @Transactional
+    // Write operations โ€” performed inside service @Transactional
     // ---------------------------------------------------------------------------
 
     /**
@@ -216,7 +216,7 @@ public class ArrivalInspectionRepository {
      */
     public boolean avrExists(String cpny, String whs, String cust, String avNum, int lineNum) {
         String sql =
-            "SELECT COUNT(*) FROM SGWH0001.GWH_TJ_AV_R " +
+            "SELECT COUNT(*) FROM GWH.GWH_TJ_AV_R " +
             "WHERE AVR_CPNY_COD = :cpny AND AVR_WHS_COD = :whs AND AVR_CUST_COD = :cust " +
             "  AND AVR_AS_NUM = :avNum AND AVR_ASLN_NUM = :lineNum AND AVR_ASSQ_NUM = 1 AND DEL_FLG = '0'";
         Query q = em.createNativeQuery(sql);
@@ -234,7 +234,7 @@ public class ArrivalInspectionRepository {
     public String[] getAvrLocation(String cpny, String whs, String cust, String avNum, int lineNum) {
         String sql =
             "SELECT AVR_AREA_COD, AVR_RACK_COD, AVR_PSTN_COD, AVR_LVL_COD " +
-            "FROM SGWH0001.GWH_TJ_AV_R " +
+            "FROM GWH.GWH_TJ_AV_R " +
             "WHERE AVR_CPNY_COD = :cpny AND AVR_WHS_COD = :whs AND AVR_CUST_COD = :cust " +
             "  AND AVR_AS_NUM = :avNum AND AVR_ASLN_NUM = :lineNum AND AVR_ASSQ_NUM = 1 AND DEL_FLG = '0'";
         Query q = em.createNativeQuery(sql);
@@ -256,7 +256,7 @@ public class ArrivalInspectionRepository {
     public Object[] getAvrArrivalNumbers(String cpny, String whs, String cust, String avNum, int lineNum) {
         String sql =
             "SELECT AVR_AS_NUM, AVR_ASLN_NUM, AVR_ASSQ_NUM " +
-            "FROM SGWH0001.GWH_TJ_AV_R " +
+            "FROM GWH.GWH_TJ_AV_R " +
             "WHERE AVR_CPNY_COD = :cpny AND AVR_WHS_COD = :whs AND AVR_CUST_COD = :cust " +
             "  AND AVR_AS_NUM = :avNum AND AVR_ASLN_NUM = :lineNum AND DEL_FLG = '0'" +
             "  AND ROWNUM = 1";
@@ -284,7 +284,7 @@ public class ArrivalInspectionRepository {
         // because Hibernate cannot infer the column type for a null parameter.
         String lpnClause = (lpnNumber != null) ? "AVR_COI1 = :lpn, " : "";
         String sql =
-            "UPDATE SGWH0001.GWH_TJ_AV_R " +
+            "UPDATE GWH.GWH_TJ_AV_R " +
             "SET AVR_RTPC_QTY = NVL(AVR_RTPC_QTY, 0) + :addQty, " +
             "    AVR_RPC_QTY  = NVL(AVR_RPC_QTY, 0)  + :addQty, " +
             "    " + lpnClause +
@@ -306,7 +306,7 @@ public class ArrivalInspectionRepository {
      */
     public int getLineReceivedQty(String cpny, String whs, String cust, String avNum, int lineNum) {
         String sql =
-            "SELECT NVL(SUM(AVR_RTPC_QTY), 0) FROM SGWH0001.GWH_TJ_AV_R " +
+            "SELECT NVL(SUM(AVR_RTPC_QTY), 0) FROM GWH.GWH_TJ_AV_R " +
             "WHERE AVR_CPNY_COD = :cpny AND AVR_WHS_COD = :whs AND AVR_CUST_COD = :cust " +
             "  AND AVR_AS_NUM = :avNum AND AVR_ASLN_NUM = :lineNum AND DEL_FLG = '0'";
         Query q = em.createNativeQuery(sql);
@@ -322,7 +322,7 @@ public class ArrivalInspectionRepository {
      */
     public int getTotalReceivedQty(String cpny, String whs, String cust, String avNum) {
         String sql =
-            "SELECT NVL(SUM(AVR_RTPC_QTY), 0) FROM SGWH0001.GWH_TJ_AV_R " +
+            "SELECT NVL(SUM(AVR_RTPC_QTY), 0) FROM GWH.GWH_TJ_AV_R " +
             "WHERE AVR_CPNY_COD = :cpny AND AVR_WHS_COD = :whs AND AVR_CUST_COD = :cust " +
             "  AND AVR_AS_NUM = :avNum AND DEL_FLG = '0'";
         Query q = em.createNativeQuery(sql);
@@ -335,7 +335,7 @@ public class ArrivalInspectionRepository {
 
     /** Delete existing AVR records for a line (used before re-inserting on NEW mode) */
     public int deleteArrivalResults(String cpny, String whs, String cust, String avNum, int lineNum) {
-        String sql = "DELETE FROM SGWH0001.GWH_TJ_AV_R " +
+        String sql = "DELETE FROM GWH.GWH_TJ_AV_R " +
                      "WHERE AVR_CPNY_COD = :cpny AND AVR_WHS_COD = :whs AND AVR_CUST_COD = :cust " +
                      "  AND AVR_AS_NUM = :avNum AND AVR_ASLN_NUM = :lineNum";
         Query q = em.createNativeQuery(sql);
@@ -348,7 +348,7 @@ public class ArrivalInspectionRepository {
     }
 
     /**
-     * Insert one AVR record — matches legacy GwhAbins010DAO.insertGwhTjAvR().
+     * Insert one AVR record โ€” matches legacy GwhAbins010DAO.insertGwhTjAvR().
      * All columns aligned with DATABASE_COMPREHENSIVE.md GWH_TJ_AV_R (123 cols).
      */
     public void insertArrivalResult(
@@ -363,7 +363,7 @@ public class ArrivalInspectionRepository {
             String lpnNumber, String userId) {
 
         String sql =
-            "INSERT INTO SGWH0001.GWH_TJ_AV_R " +
+            "INSERT INTO GWH.GWH_TJ_AV_R " +
             "(AVR_CPNY_COD, AVR_WHS_COD, AVR_CUST_COD, AVR_AS_NUM, AVR_ASLN_NUM, AVR_ASSQ_NUM, " +
             " AVR_AS_KND, AVR_TRN_KND, AVR_CRT_YMD, AVR_AVSP_YMD, AVR_AVSP_STS, " +
             " AVR_PROD_COD, AVR_ORGN_COD, AVR_SBIV_COD, " +
@@ -429,7 +429,7 @@ public class ArrivalInspectionRepository {
     public void updateDetailStatus(String cpny, String whs, String cust, String avNum, int lineNum,
                                    String newStatus, String userId) {
         String sql =
-            "UPDATE SGWH0001.GWH_TJ_AV_D " +
+            "UPDATE GWH.GWH_TJ_AV_D " +
             "SET AVD_AV_STS = :sts, AVD_INSP_STS = 'Y', " +
             "UPD_YMD = TO_CHAR(SYSDATE,'YYYYMMDD'), UPD_TIM = TO_CHAR(SYSDATE,'HH24MISS'), UPD_USER = :userId, UPD_YMDHMS = SYSTIMESTAMP, UPD_L_YMDHMS = SYSTIMESTAMP " +
             "WHERE AVD_CPNY_COD = :cpny AND AVD_WHS_COD = :whs AND AVD_CUST_COD = :cust " +
@@ -445,7 +445,7 @@ public class ArrivalInspectionRepository {
     public void updateResultStatus(String cpny, String whs, String cust, String avNum, int lineNum,
                                    String newStatus, String userId) {
         String sql =
-            "UPDATE SGWH0001.GWH_TJ_AV_R " +
+            "UPDATE GWH.GWH_TJ_AV_R " +
             "SET AVR_AVSP_STS = :sts, UPD_YMD = TO_CHAR(SYSDATE,'YYYYMMDD'), UPD_TIM = TO_CHAR(SYSDATE,'HH24MISS'), UPD_USER = :userId, UPD_YMDHMS = SYSTIMESTAMP, UPD_L_YMDHMS = SYSTIMESTAMP " +
             "WHERE AVR_CPNY_COD = :cpny AND AVR_WHS_COD = :whs AND AVR_CUST_COD = :cust " +
             "  AND AVR_AS_NUM = :avNum AND AVR_ASLN_NUM = :lineNum AND AVR_ASSQ_NUM = 1 AND DEL_FLG = '0'";
@@ -464,7 +464,7 @@ public class ArrivalInspectionRepository {
     public boolean allDetailLinesHaveStatus(String cpny, String whs, String cust,
                                             String avNum, String status) {
         String sql =
-            "SELECT COUNT(*) FROM SGWH0001.GWH_TJ_AV_D " +
+            "SELECT COUNT(*) FROM GWH.GWH_TJ_AV_D " +
             "WHERE AVD_CPNY_COD = :cpny AND AVD_WHS_COD = :whs AND AVD_CUST_COD = :cust " +
             "  AND AVD_AV_NUM = :avNum AND DEL_FLG = '0' AND AVD_AV_STS <> :sts";
         Query q = em.createNativeQuery(sql);
@@ -481,11 +481,11 @@ public class ArrivalInspectionRepository {
 
     /**
      * Returns true if every active AVD line for the arrival has status 209 (Inspected)
-     * OR 205 (Accepted discrepancy) — i.e., all lines are "done" regardless of discrepancy.
+     * OR 205 (Accepted discrepancy) โ€” i.e., all lines are "done" regardless of discrepancy.
      */
     public boolean allDetailLinesComplete(String cpny, String whs, String cust, String avNum) {
         String sql =
-            "SELECT COUNT(*) FROM SGWH0001.GWH_TJ_AV_D " +
+            "SELECT COUNT(*) FROM GWH.GWH_TJ_AV_D " +
             "WHERE AVD_CPNY_COD = :cpny AND AVD_WHS_COD = :whs AND AVD_CUST_COD = :cust " +
             "  AND AVD_AV_NUM = :avNum AND DEL_FLG = '0' " +
             "  AND AVD_AV_STS NOT IN ('209', '205')";
@@ -504,7 +504,7 @@ public class ArrivalInspectionRepository {
     public void updateHeaderStatus(String cpny, String whs, String cust, String avNum,
                                    String newStatus, String userId) {
         String sql =
-            "UPDATE SGWH0001.GWH_TJ_AV_H " +
+            "UPDATE GWH.GWH_TJ_AV_H " +
             "SET AVH_AV_STS = :sts, UPD_YMD = TO_CHAR(SYSDATE,'YYYYMMDD'), UPD_TIM = TO_CHAR(SYSDATE,'HH24MISS'), UPD_USER = :userId, UPD_YMDHMS = SYSTIMESTAMP, UPD_L_YMDHMS = SYSTIMESTAMP " +
             "WHERE AVH_CPNY_COD = :cpny AND AVH_WHS_COD = :whs AND AVH_CUST_COD = :cust " +
             "  AND AVH_AV_NUM = :avNum AND DEL_FLG = '0'";
@@ -517,7 +517,7 @@ public class ArrivalInspectionRepository {
     /** Cancel: logical delete of all AVR records for an arrival */
     public void cancelArrivalResults(String cpny, String whs, String cust, String avNum, String userId) {
         String sql =
-            "UPDATE SGWH0001.GWH_TJ_AV_R " +
+            "UPDATE GWH.GWH_TJ_AV_R " +
             "SET DEL_FLG = '1', UPD_YMD = TO_CHAR(SYSDATE,'YYYYMMDD'), UPD_TIM = TO_CHAR(SYSDATE,'HH24MISS'), UPD_USER = :userId, UPD_YMDHMS = SYSTIMESTAMP, UPD_L_YMDHMS = SYSTIMESTAMP " +
             "WHERE AVR_CPNY_COD = :cpny AND AVR_WHS_COD = :whs AND AVR_CUST_COD = :cust " +
             "  AND AVR_AS_NUM = :avNum AND DEL_FLG = '0'";
@@ -531,7 +531,7 @@ public class ArrivalInspectionRepository {
     public void cancelDetailStatuses(String cpny, String whs, String cust, String avNum,
                                      String revertStatus, String userId) {
         String sql =
-            "UPDATE SGWH0001.GWH_TJ_AV_D " +
+            "UPDATE GWH.GWH_TJ_AV_D " +
             "SET AVD_AV_STS = :sts, UPD_YMD = TO_CHAR(SYSDATE,'YYYYMMDD'), UPD_TIM = TO_CHAR(SYSDATE,'HH24MISS'), UPD_USER = :userId, UPD_YMDHMS = SYSTIMESTAMP, UPD_L_YMDHMS = SYSTIMESTAMP " +
             "WHERE AVD_CPNY_COD = :cpny AND AVD_WHS_COD = :whs AND AVD_CUST_COD = :cust " +
             "  AND AVD_AV_NUM = :avNum AND DEL_FLG = '0'";
@@ -549,12 +549,12 @@ public class ArrivalInspectionRepository {
                           String subInvCode, String userId) {
         // Skip LPN insert if arrival line/seq numbers are invalid (0)
         if (lineNum == 0 || seqNum == 0) {
-            log.warn("[upsertLpn] Skipped — lineNum={} seqNum={} are invalid for lpn={}", lineNum, seqNum, lpnNumber);
+            log.warn("[upsertLpn] Skipped โ€” lineNum={} seqNum={} are invalid for lpn={}", lineNum, seqNum, lpnNumber);
             return;
         }
         // --- LPN Header upsert ---
         String checkSql =
-            "SELECT COUNT(*) FROM SGWH0001.GWH_TJ_LPN " +
+            "SELECT COUNT(*) FROM GWH.GWH_TJ_LPN " +
             "WHERE LPN_CPNY_COD = :cpny AND LPN_WHS_COD = :whs AND LPN_CUST_COD = :cust " +
             "  AND LPN_NUM = :lpn AND DEL_FLG = '0'";
         Query checkQ = em.createNativeQuery(checkSql);
@@ -566,7 +566,7 @@ public class ArrivalInspectionRepository {
 
         if (count == 0) {
             String insertSql =
-                "INSERT INTO SGWH0001.GWH_TJ_LPN " +
+                "INSERT INTO GWH.GWH_TJ_LPN " +
                 "(LPN_CPNY_COD, LPN_WHS_COD, LPN_CUST_COD, LPN_NUM, LPN_TYPE, LPN_STS, " +
                 " LPN_AV_NUM, LPN_TTL_QTY, LPN_RCV_YMD, DEL_FLG, CRT_USER, CRT_YMDHMS, UPD_USER, UPD_YMDHMS) " +
                 "VALUES (:cpny, :whs, :cust, :lpn, :type, '200', " +
@@ -579,7 +579,7 @@ public class ArrivalInspectionRepository {
             iQ.executeUpdate();
         } else {
             String updateSql =
-                "UPDATE SGWH0001.GWH_TJ_LPN " +
+                "UPDATE GWH.GWH_TJ_LPN " +
                 "SET LPN_STS = '200', LPN_AV_NUM = :avNum, UPD_USER = :userId, UPD_YMDHMS = SYSTIMESTAMP " +
                 "WHERE LPN_CPNY_COD = :cpny AND LPN_WHS_COD = :whs AND LPN_CUST_COD = :cust " +
                 "  AND LPN_NUM = :lpn AND DEL_FLG = '0'";
@@ -592,7 +592,7 @@ public class ArrivalInspectionRepository {
 
         // --- LPN Detail upsert (AV_NUM, AVLN_NUM, AVSQ_NUM from AVR) ---
         String checkDSql =
-            "SELECT COUNT(*) FROM SGWH0001.GWH_TJ_LPN_D " +
+            "SELECT COUNT(*) FROM GWH.GWH_TJ_LPN_D " +
             "WHERE LPND_CPNY_COD = :cpny AND LPND_WHS_COD = :whs AND LPND_CUST_COD = :cust " +
             "  AND LPND_LPN_NUM = :lpn AND LPND_AV_NUM = :avNum AND LPND_AVLN_NUM = :avLn " +
             "  AND LPND_AVSQ_NUM = :avSq AND DEL_FLG = '0'";
@@ -608,7 +608,7 @@ public class ArrivalInspectionRepository {
         if (detailCount == 0) {
             // Determine next line number within this LPN
             String maxLnSql =
-                "SELECT NVL(MAX(LPND_LN_NUM), 0) + 1 FROM SGWH0001.GWH_TJ_LPN_D " +
+                "SELECT NVL(MAX(LPND_LN_NUM), 0) + 1 FROM GWH.GWH_TJ_LPN_D " +
                 "WHERE LPND_CPNY_COD = :cpny AND LPND_WHS_COD = :whs AND LPND_CUST_COD = :cust " +
                 "  AND LPND_LPN_NUM = :lpn AND DEL_FLG = '0'";
             Query maxLnQ = em.createNativeQuery(maxLnSql);
@@ -617,7 +617,7 @@ public class ArrivalInspectionRepository {
             int nextLn = toBigDecimal(maxLnQ.getSingleResult()).intValue();
 
             String insertDSql =
-                "INSERT INTO SGWH0001.GWH_TJ_LPN_D " +
+                "INSERT INTO GWH.GWH_TJ_LPN_D " +
                 "(LPND_CPNY_COD, LPND_WHS_COD, LPND_CUST_COD, LPND_LPN_NUM, LPND_LN_NUM, " +
                 " LPND_PROD_COD, LPND_LOT_NUM, LPND_QTY, LPND_ALC_QTY, LPND_AVL_QTY, " +
                 " LPND_SBIV_COD, LPND_AV_NUM, LPND_AVLN_NUM, LPND_AVSQ_NUM, " +
@@ -639,7 +639,7 @@ public class ArrivalInspectionRepository {
             iDQ.executeUpdate();
         } else {
             String updateDSql =
-                "UPDATE SGWH0001.GWH_TJ_LPN_D " +
+                "UPDATE GWH.GWH_TJ_LPN_D " +
                 "SET LPND_QTY = LPND_QTY + :qty, LPND_AVL_QTY = LPND_AVL_QTY + :qty, " +
                 "    UPD_USER = :userId, UPD_YMDHMS = SYSTIMESTAMP " +
                 "WHERE LPND_CPNY_COD = :cpny AND LPND_WHS_COD = :whs AND LPND_CUST_COD = :cust " +
@@ -655,12 +655,12 @@ public class ArrivalInspectionRepository {
 
         // --- Update LPN_TTL_QTY = COUNT of detail lines, LPN_LOC_COD = Area-Rack-Position-Level ---
         String cntSql =
-            "UPDATE SGWH0001.GWH_TJ_LPN " +
-            "SET LPN_TTL_QTY = (SELECT NVL(SUM(LPND_QTY), 0) FROM SGWH0001.GWH_TJ_LPN_D " +
+            "UPDATE GWH.GWH_TJ_LPN " +
+            "SET LPN_TTL_QTY = (SELECT NVL(SUM(LPND_QTY), 0) FROM GWH.GWH_TJ_LPN_D " +
             "                   WHERE LPND_CPNY_COD = :cpny AND LPND_WHS_COD = :whs AND LPND_CUST_COD = :cust " +
             "                     AND LPND_LPN_NUM = :lpn AND DEL_FLG = '0'), " +
             "    LPN_LOC_COD = (SELECT TRIM(AVR_AREA_COD) || '-' || AVR_RACK_COD || '-' || AVR_PSTN_COD || '-' || AVR_LVL_COD " +
-            "                   FROM SGWH0001.GWH_TJ_AV_R " +
+            "                   FROM GWH.GWH_TJ_AV_R " +
             "                   WHERE AVR_CPNY_COD = :cpny AND AVR_WHS_COD = :whs AND AVR_CUST_COD = :cust " +
             "                     AND AVR_AS_NUM = :avNum AND AVR_ASLN_NUM = :lineNum AND DEL_FLG = '0' " +
             "                     AND AVR_AREA_COD IS NOT NULL AND ROWNUM = 1), " +
@@ -696,12 +696,12 @@ public class ArrivalInspectionRepository {
         // Legacy pattern: GWH_TM_TRN uses wildcard '*' partition with priority
         String sql =
             "SELECT t.TRN_SPPA_FLG, t.TRN_SHPA_FLG " +
-            "FROM SGWH0001.GWH_TJ_AV_H h " +
+            "FROM GWH.GWH_TJ_AV_H h " +
             "LEFT JOIN (" +
             "  SELECT TRN_SPPA_FLG, TRN_SHPA_FLG, TRN_KND, TRN_CPNY_COD, TRN_WHS_COD, TRN_CUST_COD," +
             "    ROW_NUMBER() OVER (PARTITION BY TRN_KND" +
             "      ORDER BY LENGTH(TRN_CPNY_COD || TRN_WHS_COD || TRN_CUST_COD) DESC) PRIORITY_SEQ" +
-            "  FROM SGWH0001.GWH_TM_TRN" +
+            "  FROM GWH.GWH_TM_TRN" +
             "  WHERE (TRN_CPNY_COD = :cpny OR TRN_CPNY_COD = '*')" +
             "    AND (TRN_WHS_COD = :whs OR TRN_WHS_COD = '*')" +
             "    AND (TRN_CUST_COD = :cust OR TRN_CUST_COD = '*')" +
@@ -738,7 +738,7 @@ public class ArrivalInspectionRepository {
     /** CHECK #12: Validate location exists in location master */
     public boolean locationExists(String cpny, String whs, String areaCod, String rackCod, String lvlCod, String pstnCod) {
         String sql =
-            "SELECT COUNT(*) FROM SGWH0001.GWH_TM_LOC " +
+            "SELECT COUNT(*) FROM GWH.GWH_TM_LOC " +
             "WHERE LOC_CPNY_COD = :cpny AND LOC_WHS_COD = :whs " +
             "  AND TRIM(LOC_AREA_COD) = TRIM(:area) AND LOC_RACK_COD = :rack " +
             "  AND LOC_LVL_COD = :lvl AND LOC_PSTN_COD = :pstn AND DEL_FLG = '0'";
@@ -759,7 +759,7 @@ public class ArrivalInspectionRepository {
     public boolean hasDifferentProductAtLocation(String cpny, String whs, String cust,
             String areaCod, String rackCod, String lvlCod, String pstnCod, String productCode) {
         String sql =
-            "SELECT COUNT(*) FROM SGWH0001.GWH_TJ_ST " +
+            "SELECT COUNT(*) FROM GWH.GWH_TJ_ST " +
             "WHERE ST_CPNY_COD = :cpny AND ST_WHS_COD = :whs AND ST_CUST_COD = :cust " +
             "  AND TRIM(ST_AREA_COD) = TRIM(:area) AND ST_RACK_COD = :rack " +
             "  AND ST_LVL_COD = :lvl AND ST_PSTN_COD = :pstn " +
@@ -781,8 +781,8 @@ public class ArrivalInspectionRepository {
     /** CHECK #8: Get product group temperature control code */
     public String getProductTempControl(String cpny, String whs, String cust, String productCode) {
         String sql =
-            "SELECT g.PRDG_TEMP_CTR FROM SGWH0001.GWH_TM_PROD p " +
-            "JOIN SGWH0001.GWH_TM_PROD_G g ON g.PRDG_CPNY_COD = p.PROD_CPNY_COD " +
+            "SELECT g.PRDG_TEMP_CTR FROM GWH.GWH_TM_PROD p " +
+            "JOIN GWH.GWH_TM_PROD_G g ON g.PRDG_CPNY_COD = p.PROD_CPNY_COD " +
             "  AND g.PRDG_WHS_COD = p.PROD_WHS_COD AND g.PRDG_CUST_COD = p.PROD_CUST_COD " +
             "  AND g.PRDG_COD = p.PROD_PRDG_COD AND g.DEL_FLG = '0' " +
             "WHERE p.PROD_CPNY_COD = :cpny AND p.PROD_WHS_COD = :whs " +
@@ -806,7 +806,7 @@ public class ArrivalInspectionRepository {
     public boolean locationMatchesTemperature(String cpny, String whs,
             String areaCod, String rackCod, String lvlCod, String pstnCod, String tempCtrl) {
         String sql =
-            "SELECT COUNT(*) FROM SGWH0001.GWH_TM_LOC " +
+            "SELECT COUNT(*) FROM GWH.GWH_TM_LOC " +
             "WHERE LOC_CPNY_COD = :cpny AND LOC_WHS_COD = :whs " +
             "  AND TRIM(LOC_AREA_COD) = TRIM(:area) AND LOC_RACK_COD = :rack " +
             "  AND LOC_LVL_COD = :lvl AND LOC_PSTN_COD = :pstn " +
@@ -828,7 +828,7 @@ public class ArrivalInspectionRepository {
     /** CHECK #13: Get product weight and volume per piece */
     public double[] getProductWeightVolume(String cpny, String whs, String cust, String productCode) {
         String sql =
-            "SELECT NVL(PROD_PC_WGT, 0), NVL(PROD_PC_M3, 0) FROM SGWH0001.GWH_TM_PROD " +
+            "SELECT NVL(PROD_PC_WGT, 0), NVL(PROD_PC_M3, 0) FROM GWH.GWH_TM_PROD " +
             "WHERE PROD_CPNY_COD = :cpny AND PROD_WHS_COD = :whs " +
             "  AND PROD_CUST_COD = :cust AND PROD_COD = :prod AND DEL_FLG = '0'";
         try {
@@ -868,7 +868,7 @@ public class ArrivalInspectionRepository {
             "  SELECT PRCC_RSTS, PRCC_PSTS, PRCC_FSTS," +
             "    ROW_NUMBER() OVER (PARTITION BY PRCC_PRCS_COD" +
             "      ORDER BY LENGTH(PRCC_CPNY_COD || PRCC_WHS_COD || PRCC_CUST_COD) DESC) PRIORITY_SEQ" +
-            "  FROM SGWH0001.GWH_TM_PRCC" +
+            "  FROM GWH.GWH_TM_PRCC" +
             "  WHERE (PRCC_CPNY_COD = :cpny OR PRCC_CPNY_COD = '*')" +
             "    AND (PRCC_WHS_COD = :whs OR PRCC_WHS_COD = '*')" +
             "    AND (PRCC_CUST_COD = :cust OR PRCC_CUST_COD = '*')" +
@@ -945,7 +945,7 @@ public class ArrivalInspectionRepository {
     @SuppressWarnings("unchecked")
     public String getLocationSearchKind(String cpny, String whs, String cust) {
         String sql =
-            "SELECT M1.CUST_LOCS_KND FROM SGWH0001.GWH_TM_CUST M1 " +
+            "SELECT M1.CUST_LOCS_KND FROM GWH.GWH_TM_CUST M1 " +
             "WHERE M1.CUST_CPNY_COD = :cpny AND M1.CUST_WHS_COD = :whs " +
             "  AND M1.CUST_COD = :cust AND M1.DEL_FLG = '0'";
         Query q = em.createNativeQuery(sql);
@@ -960,20 +960,20 @@ public class ArrivalInspectionRepository {
     }
 
     /**
-     * Final shelving location — where this product was last received (most recent stock record).
+     * Final shelving location โ€” where this product was last received (most recent stock record).
      * Legacy: GwhApins010DAO.getFinalShelvingLoc()
      * Returns [area, rack, pstn, lvl] or null if not found.
      */
     public String[] getFinalShelvingLocation(String cpny, String whs, String cust, String productCode) {
         String sql =
             "SELECT T1.ST_AREA_COD, T1.ST_RACK_COD, T1.ST_PSTN_COD, T1.ST_LVL_COD " +
-            "FROM SGWH0001.GWH_TJ_ST T1 " +
+            "FROM GWH.GWH_TJ_ST T1 " +
             "WHERE T1.ST_CPNY_COD = :cpny AND T1.ST_WHS_COD = :whs " +
             "  AND T1.ST_CUST_COD = :cust AND T1.ST_PROD_COD = :prd " +
             "  AND T1.DEL_FLG = '0' " +
             "  AND T1.CRT_YMDHMS = (" +
-            "    SELECT MAX(TJ1.CRT_YMDHMS) FROM SGWH0001.GWH_TJ_ST TJ1 " +
-            "    LEFT JOIN SGWH0001.GWH_TJ_AV_R TJ2 " +
+            "    SELECT MAX(TJ1.CRT_YMDHMS) FROM GWH.GWH_TJ_ST TJ1 " +
+            "    LEFT JOIN GWH.GWH_TJ_AV_R TJ2 " +
             "      ON TJ2.AVR_CPNY_COD = TJ1.ST_CPNY_COD " +
             "      AND TJ2.AVR_WHS_COD = TJ1.ST_WHS_COD " +
             "      AND TJ2.AVR_CUST_COD = TJ1.ST_CUST_COD " +
@@ -999,7 +999,7 @@ public class ArrivalInspectionRepository {
     }
 
     /**
-     * Maximum stock location — location with highest physical stock for this product.
+     * Maximum stock location โ€” location with highest physical stock for this product.
      * Legacy: GwhApins010DAO.getMaximumStockLoc()
      * Returns [area, rack, pstn, lvl] or null if not found.
      */
@@ -1009,7 +1009,7 @@ public class ArrivalInspectionRepository {
             "FROM (" +
             "  SELECT SUM(T1.ST_PYST_QTY) AS TOTAL_QTY, " +
             "    T1.ST_AREA_COD, T1.ST_RACK_COD, T1.ST_PSTN_COD, T1.ST_LVL_COD " +
-            "  FROM SGWH0001.GWH_TJ_ST T1 " +
+            "  FROM GWH.GWH_TJ_ST T1 " +
             "  WHERE T1.ST_CPNY_COD = :cpny AND T1.ST_WHS_COD = :whs " +
             "    AND T1.ST_CUST_COD = :cust AND T1.ST_PROD_COD = :prd " +
             "    AND T1.DEL_FLG = '0' " +
@@ -1038,7 +1038,7 @@ public class ArrivalInspectionRepository {
     public String[] getProductDefaultLocation(String cpny, String whs, String cust, String productCode) {
         String sql =
             "SELECT P.PROD_RCAR_COD, P.PROD_RCRA_COD, P.PROD_RCPS_COD, P.PROD_RCLV_COD " +
-            "FROM SGWH0001.GWH_TM_PROD P " +
+            "FROM GWH.GWH_TM_PROD P " +
             "WHERE P.PROD_CPNY_COD = :cpny AND P.PROD_WHS_COD = :whs " +
             "  AND P.PROD_CUST_COD = :cust AND P.PROD_COD = :prd AND P.DEL_FLG = '0'";
         Query q = em.createNativeQuery(sql);
@@ -1065,7 +1065,7 @@ public class ArrivalInspectionRepository {
     public String[] getCustomerDefaultLocation(String cpny, String whs, String cust) {
         String sql =
             "SELECT C.CUST_AV_AREA, C.CUST_AV_RACK, C.CUST_AV_PSTN, C.CUST_AV_LVL " +
-            "FROM SGWH0001.GWH_TM_CUST C " +
+            "FROM GWH.GWH_TM_CUST C " +
             "WHERE C.CUST_CPNY_COD = :cpny AND C.CUST_WHS_COD = :whs " +
             "  AND C.CUST_COD = :cust AND C.DEL_FLG = '0'";
         Query q = em.createNativeQuery(sql);
@@ -1090,7 +1090,7 @@ public class ArrivalInspectionRepository {
 
     /**
      * Insert one transaction log record into GWH_TJ_XT.
-     * Matches legacy gwhCpxtBLC.gwhCpxt001Reg() — records arrival inspection events.
+     * Matches legacy gwhCpxtBLC.gwhCpxt001Reg() โ€” records arrival inspection events.
      *
      * @param opKnd Operation kind: first 2 chars of PRCC_FSTS (e.g. "20" for status 200)
      */
@@ -1099,7 +1099,7 @@ public class ArrivalInspectionRepository {
                                      String asKnd, String opKnd,
                                      String userId) {
         String sql =
-            "INSERT INTO SGWH0001.GWH_TJ_XT (" +
+            "INSERT INTO GWH.GWH_TJ_XT (" +
             "DEL_FLG, CRT_YMD, CRT_TIM, CRT_TMID, CRT_USER, CRT_PGM, CRT_TM_ZONE, CRT_YMDHMS, CRT_L_YMDHMS, " +
             "UPD_YMD, UPD_TIM, UPD_TMID, UPD_USER, UPD_PGM, UPD_TM_ZONE, UPD_YMDHMS, UPD_L_YMDHMS, " +
             "XT_CPNY_COD, XT_WHS_COD, XT_CUST_COD, XT_AS_NUM, XT_ASLN_NUM, XT_ASSQ_NUM, " +
@@ -1121,7 +1121,7 @@ public class ArrivalInspectionRepository {
             q.setParameter("opKnd", opKnd);
             q.executeUpdate();
         } catch (RuntimeException ex) {
-            // Duplicate XT — log and skip (same as legacy)
+            // Duplicate XT โ€” log and skip (same as legacy)
             String msg = ex.getMessage();
             if (msg != null && (msg.contains("ORA-00001") || msg.contains("unique constraint"))) {
                 log.warn("[insertTransactionLog] Duplicate XT for {}/{}/{}, skipping", asNum, aslnNum, assqNum);
@@ -1135,9 +1135,9 @@ public class ArrivalInspectionRepository {
      * Resolve recommended location using the legacy 3-tier priority system.
      * <pre>
      * Priority (controlled by CUST_LOCS_KND):
-     *   "1" → Final shelving (last received location) → Product default → Customer default
-     *   "2" → Maximum stock location                  → Product default → Customer default
-     *   "3"/"0" →                                       Product default → Customer default
+     *   "1" โ’ Final shelving (last received location) โ’ Product default โ’ Customer default
+     *   "2" โ’ Maximum stock location                  โ’ Product default โ’ Customer default
+     *   "3"/"0" โ’                                       Product default โ’ Customer default
      * </pre>
      * Returns [area, rack, pstn, lvl] or null if no location resolved.
      */

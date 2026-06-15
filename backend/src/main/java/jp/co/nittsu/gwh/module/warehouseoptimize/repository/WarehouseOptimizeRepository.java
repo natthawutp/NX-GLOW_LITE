@@ -2,6 +2,7 @@ package jp.co.nittsu.gwh.module.warehouseoptimize.repository;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import jp.co.nittsu.gwh.config.OracleObjectNameResolver;
 import jp.co.nittsu.gwh.module.warehouseoptimize.dto.WarehouseOptimizeModels;
 import jp.co.nittsu.gwh.module.warehouseoptimize.dto.WarehouseOptimizeRequests;
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -15,31 +16,46 @@ import javax.annotation.PostConstruct;
 import javax.persistence.EntityManager;
 import javax.persistence.PersistenceContext;
 import javax.persistence.Query;
+import javax.sql.DataSource;
 import java.math.BigDecimal;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
 
 @Repository
 public class WarehouseOptimizeRepository {
 
-    private static final String[] ORACLE_STOCK_SOURCE_CANDIDATES = {
-            "SGWH0001.GWH_TJ_ST",
-            "GWH_TJ_ST",
-            "SGWH0001.VGWH_TJ_ST",
-            "VGWH_TJ_ST"
-    };
+    private static final String STOCK_SOURCE_CACHE_KEY = "oracle.stock";
+    private static final String LOCATION_SOURCE_CACHE_KEY = "oracle.location";
+    private static final String AREA_SOURCE_CACHE_KEY = "oracle.area";
+    private static final String INBOUND_HEADER_SOURCE_CACHE_KEY = "oracle.inboundHeader";
+    private static final String INBOUND_DETAIL_SOURCE_CACHE_KEY = "oracle.inboundDetail";
+    private static final String OUTBOUND_HEADER_SOURCE_CACHE_KEY = "oracle.outboundHeader";
+    private static final String OUTBOUND_DETAIL_SOURCE_CACHE_KEY = "oracle.outboundDetail";
+    private static final String NO_SOURCE = "__NONE__";
 
     private final JdbcTemplate jdbcTemplate;
     private final NamedParameterJdbcTemplate namedJdbcTemplate;
+    private final NamedParameterJdbcTemplate oracleNamedJdbcTemplate;
     private final ObjectMapper objectMapper;
+    private final ConcurrentMap<String, String> sourceCache = new ConcurrentHashMap<>();
+    private final String[] oracleStockSourceCandidates;
+    private final String[] oracleLocationSourceCandidates;
+    private final String[] oracleAreaSourceCandidates;
+    private final String[] oracleInboundHeaderSourceCandidates;
+    private final String[] oracleInboundDetailSourceCandidates;
+    private final String[] oracleOutboundHeaderSourceCandidates;
+    private final String[] oracleOutboundDetailSourceCandidates;
 
     @PersistenceContext
     private EntityManager entityManager;
@@ -47,10 +63,22 @@ public class WarehouseOptimizeRepository {
     public WarehouseOptimizeRepository(
             @Qualifier("warehouseOptimizeJdbcTemplate") JdbcTemplate jdbcTemplate,
             @Qualifier("warehouseOptimizeNamedParameterJdbcTemplate") NamedParameterJdbcTemplate namedJdbcTemplate,
-            ObjectMapper objectMapper) {
+            @Qualifier("dataSource") DataSource oracleDataSource,
+            ObjectMapper objectMapper,
+            OracleObjectNameResolver oracleObjectNameResolver) {
         this.jdbcTemplate = jdbcTemplate;
         this.namedJdbcTemplate = namedJdbcTemplate;
+        JdbcTemplate oracleJdbcTemplate = new JdbcTemplate(oracleDataSource);
+        oracleJdbcTemplate.setFetchSize(1000);
+        this.oracleNamedJdbcTemplate = new NamedParameterJdbcTemplate(oracleJdbcTemplate);
         this.objectMapper = objectMapper;
+        this.oracleStockSourceCandidates = oracleObjectNameResolver.preferredCandidates("GWH_TJ_ST", "VGWH_TJ_ST");
+        this.oracleLocationSourceCandidates = oracleObjectNameResolver.preferredCandidates("GWH_TM_LOC");
+        this.oracleAreaSourceCandidates = oracleObjectNameResolver.preferredCandidates("GWH_TM_AREA");
+        this.oracleInboundHeaderSourceCandidates = oracleObjectNameResolver.preferredCandidates("GWH_TJ_AV_H", "VGWH_TJ_AV_H");
+        this.oracleInboundDetailSourceCandidates = oracleObjectNameResolver.preferredCandidates("GWH_TJ_AV_D", "VGWH_TJ_AV_D");
+        this.oracleOutboundHeaderSourceCandidates = oracleObjectNameResolver.preferredCandidates("GWH_TJ_SP_H", "VGWH_TJ_SP_H");
+        this.oracleOutboundDetailSourceCandidates = oracleObjectNameResolver.preferredCandidates("GWH_TJ_SP_D", "VGWH_TJ_SP_D");
     }
 
     @PostConstruct
@@ -191,6 +219,14 @@ public class WarehouseOptimizeRepository {
                 "FROM gwh_warehouse_profiles WHERE id = :id";
         List<WarehouseOptimizeModels.WarehouseProfileDetail> results = namedJdbcTemplate.query(
                 sql, new MapSqlParameterSource("id", id), (rs, rowNum) -> mapProfileDetail(rs));
+        return results.isEmpty() ? null : results.get(0);
+    }
+
+    public WarehouseOptimizeModels.WarehouseProfileSummary findProfileSummary(Long id) {
+        String sql = "SELECT id, op_cpny_cod, op_whs_cod, op_cust_cod, op_pf_name, description, warehouse_length, warehouse_width, created_at, updated_at " +
+                "FROM gwh_warehouse_profiles WHERE id = :id";
+        List<WarehouseOptimizeModels.WarehouseProfileSummary> results = namedJdbcTemplate.query(
+                sql, new MapSqlParameterSource("id", id), profileSummaryRowMapper());
         return results.isEmpty() ? null : results.get(0);
     }
 
@@ -566,15 +602,140 @@ public class WarehouseOptimizeRepository {
 
     public List<Map<String, Object>> loadOracleStockRows(String companyCode, String warehouseCode, String customerCode, LocalDateTime cursor) {
         RuntimeException lastException = null;
-        for (String source : ORACLE_STOCK_SOURCE_CANDIDATES) {
+        for (String source : orderedCandidates(STOCK_SOURCE_CACHE_KEY, oracleStockSourceCandidates)) {
             try {
-                return loadOracleStockRowsFromSource(source, companyCode, warehouseCode, customerCode, cursor);
+                List<Map<String, Object>> rows = loadOracleStockRowsFromSource(source, companyCode, warehouseCode, customerCode, cursor);
+                sourceCache.put(STOCK_SOURCE_CACHE_KEY, source);
+                return rows;
             } catch (RuntimeException ex) {
                 if (!isObjectNotFound(ex)) {
                     throw ex;
                 }
                 lastException = ex;
+                invalidateCachedSource(STOCK_SOURCE_CACHE_KEY, source);
             }
+        }
+        if (lastException != null) {
+            throw lastException;
+        }
+        return Collections.emptyList();
+    }
+
+    public List<WarehouseOptimizeModels.OracleLocationMasterRow> loadOracleLocationMasterRows(
+            String companyCode,
+            String warehouseCode) {
+        RuntimeException lastException = null;
+        for (String locationSource : orderedCandidates(LOCATION_SOURCE_CACHE_KEY, oracleLocationSourceCandidates)) {
+            for (String areaSource : orderedOptionalCandidates(AREA_SOURCE_CACHE_KEY, oracleAreaSourceCandidates)) {
+                try {
+                    List<WarehouseOptimizeModels.OracleLocationMasterRow> rows =
+                            loadOracleLocationMasterRowsFromSource(locationSource, areaSource, companyCode, warehouseCode);
+                    sourceCache.put(LOCATION_SOURCE_CACHE_KEY, locationSource);
+                    if (areaSource != null) {
+                        sourceCache.put(AREA_SOURCE_CACHE_KEY, areaSource);
+                    } else {
+                        sourceCache.put(AREA_SOURCE_CACHE_KEY, NO_SOURCE);
+                    }
+                    return rows;
+                } catch (RuntimeException ex) {
+                    if (!isObjectNotFound(ex)) {
+                        throw ex;
+                    }
+                    lastException = ex;
+                    if (areaSource != null) {
+                        invalidateCachedSource(AREA_SOURCE_CACHE_KEY, areaSource);
+                    }
+                }
+            }
+            invalidateCachedSource(LOCATION_SOURCE_CACHE_KEY, locationSource);
+        }
+        if (lastException != null) {
+            throw lastException;
+        }
+        return Collections.emptyList();
+    }
+
+    public List<WarehouseOptimizeModels.OracleStatusAggregateRow> loadInboundStatusAggregateRows(
+            String companyCode,
+            String warehouseCode,
+            String customerCode) {
+        RuntimeException lastException = null;
+        for (String headerSource : orderedCandidates(INBOUND_HEADER_SOURCE_CACHE_KEY, oracleInboundHeaderSourceCandidates)) {
+            for (String detailSource : orderedCandidates(INBOUND_DETAIL_SOURCE_CACHE_KEY, oracleInboundDetailSourceCandidates)) {
+                try {
+                    List<WarehouseOptimizeModels.OracleStatusAggregateRow> rows = loadStatusAggregateRowsFromSource(
+                            headerSource,
+                            detailSource,
+                            companyCode,
+                            warehouseCode,
+                            customerCode,
+                            "AVH_CPNY_COD",
+                            "AVH_WHS_COD",
+                            "AVH_CUST_COD",
+                            "AVH_AV_NUM",
+                            "AVH_AV_STS",
+                            "AVD_CPNY_COD",
+                            "AVD_WHS_COD",
+                            "AVD_CUST_COD",
+                            "AVD_AV_NUM",
+                            "AVD_SCS_QTY",
+                            "AVD_SPC_QTY");
+                    sourceCache.put(INBOUND_HEADER_SOURCE_CACHE_KEY, headerSource);
+                    sourceCache.put(INBOUND_DETAIL_SOURCE_CACHE_KEY, detailSource);
+                    return rows;
+                } catch (RuntimeException ex) {
+                    if (!isObjectNotFound(ex)) {
+                        throw ex;
+                    }
+                    lastException = ex;
+                    invalidateCachedSource(INBOUND_DETAIL_SOURCE_CACHE_KEY, detailSource);
+                }
+            }
+            invalidateCachedSource(INBOUND_HEADER_SOURCE_CACHE_KEY, headerSource);
+        }
+        if (lastException != null) {
+            throw lastException;
+        }
+        return Collections.emptyList();
+    }
+
+    public List<WarehouseOptimizeModels.OracleStatusAggregateRow> loadOutboundStatusAggregateRows(
+            String companyCode,
+            String warehouseCode,
+            String customerCode) {
+        RuntimeException lastException = null;
+        for (String headerSource : orderedCandidates(OUTBOUND_HEADER_SOURCE_CACHE_KEY, oracleOutboundHeaderSourceCandidates)) {
+            for (String detailSource : orderedCandidates(OUTBOUND_DETAIL_SOURCE_CACHE_KEY, oracleOutboundDetailSourceCandidates)) {
+                try {
+                    List<WarehouseOptimizeModels.OracleStatusAggregateRow> rows = loadStatusAggregateRowsFromSource(
+                            headerSource,
+                            detailSource,
+                            companyCode,
+                            warehouseCode,
+                            customerCode,
+                            "SPH_CPNY_COD",
+                            "SPH_WHS_COD",
+                            "SPH_CUST_COD",
+                            "SPH_SP_NUM",
+                            "SPH_SP_STS",
+                            "SPD_CPNY_COD",
+                            "SPD_WHS_COD",
+                            "SPD_CUST_COD",
+                            "SPD_SP_NUM",
+                            "SPD_SCS_QTY",
+                            "SPD_SPC_QTY");
+                    sourceCache.put(OUTBOUND_HEADER_SOURCE_CACHE_KEY, headerSource);
+                    sourceCache.put(OUTBOUND_DETAIL_SOURCE_CACHE_KEY, detailSource);
+                    return rows;
+                } catch (RuntimeException ex) {
+                    if (!isObjectNotFound(ex)) {
+                        throw ex;
+                    }
+                    lastException = ex;
+                    invalidateCachedSource(OUTBOUND_DETAIL_SOURCE_CACHE_KEY, detailSource);
+                }
+            }
+            invalidateCachedSource(OUTBOUND_HEADER_SOURCE_CACHE_KEY, headerSource);
         }
         if (lastException != null) {
             throw lastException;
@@ -608,28 +769,138 @@ public class WarehouseOptimizeRepository {
             sql.append("AND UPD_YMDHMS > :cursor ");
         }
         sql.append("GROUP BY ").append(locationExpr).append(", ").append(productExpr);
-
-        Query query = entityManager.createNativeQuery(sql.toString());
-        query.setParameter("cpny", companyCode);
-        query.setParameter("whs", warehouseCode);
-        query.setParameter("cust", customerCode);
+        MapSqlParameterSource params = new MapSqlParameterSource()
+                .addValue("cpny", companyCode)
+                .addValue("whs", warehouseCode)
+                .addValue("cust", customerCode);
         if (cursor != null) {
-            query.setParameter("cursor", Timestamp.valueOf(cursor));
+            params.addValue("cursor", Timestamp.valueOf(cursor));
         }
 
-        @SuppressWarnings("unchecked")
-        List<Object[]> rows = query.getResultList();
-        List<Map<String, Object>> mapped = new ArrayList<>();
-        for (Object[] row : rows) {
-            Map<String, Object> item = new HashMap<>();
-            item.put("location", row[0] == null ? "" : row[0].toString().trim());
-            item.put("productCode", row[1] == null ? "" : row[1].toString().trim());
-            item.put("physicalQty", row[2] instanceof BigDecimal ? row[2] : new BigDecimal(String.valueOf(row[2] == null ? "0" : row[2])));
-            item.put("availableQty", row[3] instanceof BigDecimal ? row[3] : new BigDecimal(String.valueOf(row[3] == null ? "0" : row[3])));
-            item.put("updatedAt", toLocalDateTimeValue(row[4]));
-            mapped.add(item);
+        return oracleNamedJdbcTemplate.query(sql.toString(), params, rs -> {
+            List<Map<String, Object>> mapped = new ArrayList<>();
+            while (rs.next()) {
+                Map<String, Object> item = new HashMap<>();
+                item.put("location", trimmedValue(rs.getObject("LOCATION")));
+                item.put("productCode", trimmedValue(rs.getObject("PRODUCT_CODE")));
+                item.put("physicalQty", decimalValue(rs.getObject("PHYSICAL_QTY")));
+                item.put("availableQty", decimalValue(rs.getObject("AVAILABLE_QTY")));
+                item.put("updatedAt", toLocalDateTimeValue(rs.getObject("UPDATED_AT")));
+                mapped.add(item);
+            }
+            return mapped;
+        });
+    }
+
+    private List<WarehouseOptimizeModels.OracleLocationMasterRow> loadOracleLocationMasterRowsFromSource(
+            String locationSource,
+            String areaSource,
+            String companyCode,
+            String warehouseCode) {
+        StringBuilder sql = new StringBuilder();
+        sql.append("SELECT ");
+        sql.append("l.LOC_COD AS LOC_COD, ");
+        sql.append("l.LOC_AREA_COD AS LOC_AREA_COD, ");
+        if (areaSource != null) {
+            sql.append("a.AREA_NAM AS AREA_NAM, ");
+        } else {
+            sql.append("CAST(NULL AS VARCHAR2(255)) AS AREA_NAM, ");
         }
-        return mapped;
+        sql.append("l.LOC_RACK_COD AS LOC_RACK_COD, ");
+        sql.append("l.LOC_PSTN_COD AS LOC_PSTN_COD, ");
+        sql.append("l.LOC_LVL_COD AS LOC_LVL_COD, ");
+        sql.append("l.LOC_LEN AS LOC_LEN, ");
+        sql.append("l.LOC_WID AS LOC_WID, ");
+        sql.append("l.LOC_HIG AS LOC_HIG ");
+        sql.append("FROM ").append(locationSource).append(" l ");
+        if (areaSource != null) {
+            sql.append("LEFT JOIN ").append(areaSource).append(" a ");
+            sql.append("ON a.AREA_CPNY_COD = l.LOC_CPNY_COD ");
+            sql.append("AND a.AREA_WHS_COD = l.LOC_WHS_COD ");
+            sql.append("AND TRIM(TO_CHAR(a.AREA_COD)) = TRIM(TO_CHAR(l.LOC_AREA_COD)) ");
+            sql.append("AND a.DEL_FLG = 0 ");
+        }
+        sql.append("WHERE l.LOC_CPNY_COD = :cpny ");
+        sql.append("AND l.LOC_WHS_COD = :whs ");
+        sql.append("AND l.DEL_FLG = 0 ");
+        sql.append("ORDER BY l.LOC_AREA_COD, l.LOC_RACK_COD, l.LOC_PSTN_COD, l.LOC_LVL_COD, l.LOC_COD");
+        MapSqlParameterSource params = new MapSqlParameterSource()
+                .addValue("cpny", companyCode)
+                .addValue("whs", warehouseCode);
+
+        return oracleNamedJdbcTemplate.query(sql.toString(), params, rs -> {
+            List<WarehouseOptimizeModels.OracleLocationMasterRow> mapped = new ArrayList<>();
+            while (rs.next()) {
+                WarehouseOptimizeModels.OracleLocationMasterRow item = new WarehouseOptimizeModels.OracleLocationMasterRow();
+                item.setLocationCode(trimmedValue(rs.getObject("LOC_COD")));
+                item.setAreaCode(trimmedValue(rs.getObject("LOC_AREA_COD")));
+                item.setAreaName(trimmedValue(rs.getObject("AREA_NAM")));
+                item.setRackCode(trimmedValue(rs.getObject("LOC_RACK_COD")));
+                item.setPositionCode(trimmedValue(rs.getObject("LOC_PSTN_COD")));
+                item.setLevelCode(trimmedValue(rs.getObject("LOC_LVL_COD")));
+                item.setLength(decimalValue(rs.getObject("LOC_LEN")));
+                item.setWidth(decimalValue(rs.getObject("LOC_WID")));
+                item.setHeight(decimalValue(rs.getObject("LOC_HIG")));
+                mapped.add(item);
+            }
+            return mapped;
+        });
+    }
+
+    private List<WarehouseOptimizeModels.OracleStatusAggregateRow> loadStatusAggregateRowsFromSource(
+            String headerSource,
+            String detailSource,
+            String companyCode,
+            String warehouseCode,
+            String customerCode,
+            String headerCompanyColumn,
+            String headerWarehouseColumn,
+            String headerCustomerColumn,
+            String headerOrderColumn,
+            String headerStatusColumn,
+            String detailCompanyColumn,
+            String detailWarehouseColumn,
+            String detailCustomerColumn,
+            String detailOrderColumn,
+            String detailCasesColumn,
+            String detailPiecesColumn) {
+        StringBuilder sql = new StringBuilder();
+        sql.append("SELECT ");
+        sql.append("TRIM(TO_CHAR(h.").append(headerStatusColumn).append(")) AS STATUS_CODE, ");
+        sql.append("COUNT(DISTINCT h.").append(headerOrderColumn).append(") AS ORDER_COUNT, ");
+        sql.append("NVL(SUM(NVL(d.").append(detailCasesColumn).append(", 0)), 0) AS CS_QTY, ");
+        sql.append("NVL(SUM(NVL(d.").append(detailPiecesColumn).append(", 0)), 0) AS PCS_QTY ");
+        sql.append("FROM ").append(headerSource).append(" h ");
+        sql.append("LEFT JOIN ").append(detailSource).append(" d ");
+        sql.append("ON d.").append(detailCompanyColumn).append(" = h.").append(headerCompanyColumn).append(" ");
+        sql.append("AND d.").append(detailWarehouseColumn).append(" = h.").append(headerWarehouseColumn).append(" ");
+        sql.append("AND d.").append(detailCustomerColumn).append(" = h.").append(headerCustomerColumn).append(" ");
+        sql.append("AND d.").append(detailOrderColumn).append(" = h.").append(headerOrderColumn).append(" ");
+        sql.append("AND d.DEL_FLG = 0 ");
+        sql.append("WHERE h.").append(headerCompanyColumn).append(" = :cpny ");
+        sql.append("AND h.").append(headerWarehouseColumn).append(" = :whs ");
+        sql.append("AND h.").append(headerCustomerColumn).append(" = :cust ");
+        sql.append("AND h.DEL_FLG = 0 ");
+        sql.append("GROUP BY h.").append(headerStatusColumn).append(" ");
+        sql.append("ORDER BY h.").append(headerStatusColumn);
+
+        MapSqlParameterSource params = new MapSqlParameterSource()
+                .addValue("cpny", companyCode)
+                .addValue("whs", warehouseCode)
+                .addValue("cust", customerCode);
+
+        return oracleNamedJdbcTemplate.query(sql.toString(), params, rs -> {
+            List<WarehouseOptimizeModels.OracleStatusAggregateRow> mapped = new ArrayList<>();
+            while (rs.next()) {
+                WarehouseOptimizeModels.OracleStatusAggregateRow item = new WarehouseOptimizeModels.OracleStatusAggregateRow();
+                item.setStatusCode(trimmedValue(rs.getObject("STATUS_CODE")));
+                item.setOrderCount(rs.getLong("ORDER_COUNT"));
+                item.setCsQty(decimalValue(rs.getObject("CS_QTY")));
+                item.setPcsQty(decimalValue(rs.getObject("PCS_QTY")));
+                mapped.add(item);
+            }
+            return mapped;
+        });
     }
 
     public String toJson(Object value) {
@@ -818,6 +1089,90 @@ public class WarehouseOptimizeRepository {
         return false;
     }
 
+    private String resolveOptionalSource(String cacheKey, String[] candidates) {
+        String cached = sourceCache.get(cacheKey);
+        if (NO_SOURCE.equals(cached)) {
+            return null;
+        }
+        if (cached != null) {
+            return cached;
+        }
+
+        for (String source : candidates) {
+            try {
+                Query query = entityManager.createNativeQuery("SELECT 1 FROM " + source + " WHERE ROWNUM = 1");
+                query.getResultList();
+                sourceCache.put(cacheKey, source);
+                return source;
+            } catch (RuntimeException ex) {
+                if (!isObjectNotFound(ex)) {
+                    throw ex;
+                }
+            }
+        }
+        sourceCache.put(cacheKey, NO_SOURCE);
+        return null;
+    }
+
+    private String resolveRequiredSource(String cacheKey, String[] candidates) {
+        String cached = sourceCache.get(cacheKey);
+        if (cached != null && !NO_SOURCE.equals(cached)) {
+            return cached;
+        }
+
+        RuntimeException lastException = null;
+        for (String source : orderedCandidates(cacheKey, candidates)) {
+            try {
+                Query query = entityManager.createNativeQuery("SELECT 1 FROM " + source + " WHERE ROWNUM = 1");
+                query.getResultList();
+                sourceCache.put(cacheKey, source);
+                return source;
+            } catch (RuntimeException ex) {
+                if (!isObjectNotFound(ex)) {
+                    throw ex;
+                }
+                lastException = ex;
+            }
+        }
+
+        if (lastException != null) {
+            throw lastException;
+        }
+        throw new IllegalStateException("No Oracle source could be resolved for " + cacheKey);
+    }
+
+    private List<String> orderedCandidates(String cacheKey, String[] candidates) {
+        List<String> ordered = new ArrayList<>();
+        String cached = sourceCache.get(cacheKey);
+        if (cached != null && !cached.isEmpty() && !NO_SOURCE.equals(cached)) {
+            ordered.add(cached);
+        }
+        Arrays.stream(candidates)
+                .filter(candidate -> !ordered.contains(candidate))
+                .forEach(ordered::add);
+        return ordered;
+    }
+
+    private List<String> orderedOptionalCandidates(String cacheKey, String[] candidates) {
+        if (NO_SOURCE.equals(sourceCache.get(cacheKey))) {
+            return Collections.singletonList(null);
+        }
+
+        List<String> ordered = orderedCandidates(cacheKey, candidates);
+        ordered.add(null);
+        return ordered;
+    }
+
+    private void invalidateCachedSource(String cacheKey, String source) {
+        if (source == null) {
+            return;
+        }
+        sourceCache.remove(cacheKey, source);
+        if (NO_SOURCE.equals(sourceCache.get(cacheKey))) {
+            sourceCache.remove(cacheKey, NO_SOURCE);
+        }
+    }
+
     private String text(JsonNode node, String fieldName) {
         JsonNode value = node.path(fieldName);
         return value.isMissingNode() || value.isNull() ? null : value.asText();
@@ -834,5 +1189,19 @@ public class WarehouseOptimizeRepository {
             return null;
         }
         return value.decimalValue();
+    }
+
+    private String trimmedValue(Object value) {
+        return value == null ? null : value.toString().trim();
+    }
+
+    private BigDecimal decimalValue(Object value) {
+        if (value == null) {
+            return null;
+        }
+        if (value instanceof BigDecimal) {
+            return (BigDecimal) value;
+        }
+        return new BigDecimal(String.valueOf(value));
     }
 }

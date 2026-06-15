@@ -15,7 +15,7 @@ import java.util.List;
 public class LpnConfigRepository {
 
     private static final String[] CFG_SOURCES = {
-        "SGWH0001.GWH_TM_LPN_CFG",
+        "GWH.GWH_TM_LPN_CFG",
         "GWH_TM_LPN_CFG"
     };
 

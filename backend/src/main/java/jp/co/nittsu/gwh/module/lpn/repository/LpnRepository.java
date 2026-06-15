@@ -17,15 +17,15 @@ import java.util.List;
 public class LpnRepository {
 
     private static final String[] LPN_SOURCES = {
-        "SGWH0001.GWH_TJ_LPN"
+        "GWH.GWH_TJ_LPN"
     };
 
     private static final String[] LPN_D_SOURCES = {
-        "SGWH0001.GWH_TJ_LPN_D"
+        "GWH.GWH_TJ_LPN_D"
     };
 
     private static final String[] LPN_SEQ_SOURCES = {
-        "SGWH0001.SEQGWH_TJ_LPN"
+        "GWH.SEQGWH_TJ_LPN"
     };
 
     private static final DateTimeFormatter YMD_FORMATTER = DateTimeFormatter.ofPattern("yyyyMMdd");
@@ -226,13 +226,13 @@ public class LpnRepository {
     public void updateLpnTotalQtyFromDetail(String cpny, String whs, String cust,
                                              String lpnNumber, String user) {
         String sql =
-            "UPDATE SGWH0001.GWH_TJ_LPN " +
-            "SET LPN_TTL_QTY = (SELECT NVL(SUM(LPND_QTY), 0) FROM SGWH0001.GWH_TJ_LPN_D " +
+            "UPDATE GWH.GWH_TJ_LPN " +
+            "SET LPN_TTL_QTY = (SELECT NVL(SUM(LPND_QTY), 0) FROM GWH.GWH_TJ_LPN_D " +
             "                   WHERE LPND_CPNY_COD = :cpny AND LPND_WHS_COD = :whs AND LPND_CUST_COD = :cust " +
             "                     AND LPND_LPN_NUM = :lpn AND DEL_FLG = '0'), " +
             "    LPN_LOC_COD = (SELECT TRIM(R.AVR_AREA_COD) || '-' || R.AVR_RACK_COD || '-' || R.AVR_PSTN_COD || '-' || R.AVR_LVL_COD " +
-            "                   FROM SGWH0001.GWH_TJ_AV_R R " +
-            "                   INNER JOIN SGWH0001.GWH_TJ_LPN_D D " +
+            "                   FROM GWH.GWH_TJ_AV_R R " +
+            "                   INNER JOIN GWH.GWH_TJ_LPN_D D " +
             "                     ON D.LPND_AV_NUM = R.AVR_AS_NUM AND D.LPND_AVLN_NUM = R.AVR_ASLN_NUM AND D.LPND_AVSQ_NUM = R.AVR_ASSQ_NUM " +
             "                     AND D.LPND_CPNY_COD = R.AVR_CPNY_COD AND D.LPND_WHS_COD = R.AVR_WHS_COD AND D.LPND_CUST_COD = R.AVR_CUST_COD " +
             "                   WHERE D.LPND_CPNY_COD = :cpny AND D.LPND_WHS_COD = :whs AND D.LPND_CUST_COD = :cust " +
@@ -329,7 +329,7 @@ public class LpnRepository {
                                       String lpnNumber, String lpnRfNumber, String status, String lpnType,
                                       String locationCode, String arrivalNumber,
                                       int page, int size) {
-        String joinClause = " LEFT JOIN SGWH0001.GWH_TJ_AV_H AH" +
+        String joinClause = " LEFT JOIN GWH.GWH_TJ_AV_H AH" +
             " ON AH.AVH_AV_NUM = L.LPN_AV_NUM" +
             " AND AH.AVH_CPNY_COD = L.LPN_CPNY_COD" +
             " AND AH.AVH_WHS_COD = L.LPN_WHS_COD" +
@@ -364,11 +364,11 @@ public class LpnRepository {
         setSearchParams(countQuery, cpny, whs, cust, lpnNumber, lpnRfNumber, status, lpnType, locationCode, arrivalNumber);
         long totalRecords = ((Number) countQuery.getSingleResult()).longValue();
 
-        // Data — status from Arrival Header, location from AVR (Area-Rack-Level-Position)
+        // Data โ€” status from Arrival Header, location from AVR (Area-Rack-Level-Position)
         String locationSubquery =
             "NVL(" +
             "(SELECT TRIM(R.AVR_AREA_COD) || '-' || R.AVR_RACK_COD || '-' || R.AVR_PSTN_COD || '-' || R.AVR_LVL_COD" +
-            " FROM SGWH0001.GWH_TJ_AV_R R" +
+            " FROM GWH.GWH_TJ_AV_R R" +
             " WHERE R.AVR_COI1 = L.LPN_NUM" +
             " AND R.AVR_CPNY_COD = L.LPN_CPNY_COD" +
             " AND R.AVR_WHS_COD = L.LPN_WHS_COD" +
@@ -515,13 +515,13 @@ public class LpnRepository {
         String now = LocalDate.now().format(YMD_FORMATTER);
         String time = LocalTime.now().format(HMS_FORMATTER);
 
-        String sql = "UPDATE SGWH0001.GWH_TJ_ST s SET " +
+        String sql = "UPDATE GWH.GWH_TJ_ST s SET " +
             "s.ST_AREA_COD = :newArea, s.ST_RACK_COD = :newRack, " +
             "s.ST_PSTN_COD = :newPstn, s.ST_LVL_COD = :newLvl, " +
             "s.UPD_YMD = :updYmd, s.UPD_TIM = :updTim, s.UPD_TMID = :updTmid, s.UPD_USER = :updUser, " +
             "s.UPD_PGM = 'LPN_PUTAWAY', s.UPD_TM_ZONE = :updTmZone, s.UPD_YMDHMS = SYSTIMESTAMP, s.UPD_L_YMDHMS = SYSTIMESTAMP " +
             "WHERE EXISTS (" +
-            "SELECT 1 FROM SGWH0001.GWH_TJ_LPN_D d " +
+            "SELECT 1 FROM GWH.GWH_TJ_LPN_D d " +
             "WHERE d.LPND_CPNY_COD = s.ST_CPNY_COD AND d.LPND_WHS_COD = s.ST_WHS_COD " +
             "AND d.LPND_CUST_COD = s.ST_CUST_COD AND d.LPND_AV_NUM = s.ST_AV_NUM " +
             "AND d.LPND_AVLN_NUM = s.ST_AVLN_NUM AND d.LPND_AVSQ_NUM = s.ST_AVSQ_NUM " +
@@ -548,9 +548,9 @@ public class LpnRepository {
                                              String lpnNumber, String user) {
         String now = LocalDate.now().format(YMD_FORMATTER);
         String time = LocalTime.now().format(HMS_FORMATTER);
-        String sql = "UPDATE SGWH0001.GWH_TJ_AV_R R " +
+        String sql = "UPDATE GWH.GWH_TJ_AV_R R " +
             "SET R.AVR_RTPC_QTY = R.AVR_RTPC_QTY - (" +
-            "  SELECT D.LPND_QTY FROM SGWH0001.GWH_TJ_LPN_D D " +
+            "  SELECT D.LPND_QTY FROM GWH.GWH_TJ_LPN_D D " +
             "  WHERE D.LPND_CPNY_COD = R.AVR_CPNY_COD AND D.LPND_WHS_COD = R.AVR_WHS_COD " +
             "    AND D.LPND_CUST_COD = R.AVR_CUST_COD " +
             "    AND D.LPND_AV_NUM = R.AVR_AS_NUM AND D.LPND_AVLN_NUM = R.AVR_ASLN_NUM " +
@@ -561,7 +561,7 @@ public class LpnRepository {
             "R.UPD_USER = :user, R.UPD_PGM = 'LPN_REMOVE', " +
             "R.UPD_YMDHMS = SYSTIMESTAMP, R.UPD_L_YMDHMS = SYSTIMESTAMP " +
             "WHERE EXISTS (" +
-            "  SELECT 1 FROM SGWH0001.GWH_TJ_LPN_D D " +
+            "  SELECT 1 FROM GWH.GWH_TJ_LPN_D D " +
             "  WHERE D.LPND_CPNY_COD = R.AVR_CPNY_COD AND D.LPND_WHS_COD = R.AVR_WHS_COD " +
             "    AND D.LPND_CUST_COD = R.AVR_CUST_COD " +
             "    AND D.LPND_AV_NUM = R.AVR_AS_NUM AND D.LPND_AVLN_NUM = R.AVR_ASLN_NUM " +
@@ -581,9 +581,9 @@ public class LpnRepository {
     }
 
     public void deleteZeroQtyArrivalResultByLpn(String cpny, String whs, String cust, String lpnNumber) {
-        String sql = "DELETE FROM SGWH0001.GWH_TJ_AV_R R " +
+        String sql = "DELETE FROM GWH.GWH_TJ_AV_R R " +
             "WHERE EXISTS (" +
-            "  SELECT 1 FROM SGWH0001.GWH_TJ_LPN_D D " +
+            "  SELECT 1 FROM GWH.GWH_TJ_LPN_D D " +
             "  WHERE D.LPND_CPNY_COD = R.AVR_CPNY_COD AND D.LPND_WHS_COD = R.AVR_WHS_COD " +
             "    AND D.LPND_CUST_COD = R.AVR_CUST_COD " +
             "    AND D.LPND_AV_NUM = R.AVR_AS_NUM AND D.LPND_AVLN_NUM = R.AVR_ASLN_NUM " +
@@ -600,7 +600,7 @@ public class LpnRepository {
     }
 
     public boolean existsArrivalResultForArrival(String cpny, String whs, String cust, String arrivalNumber) {
-        String sql = "SELECT COUNT(*) FROM SGWH0001.GWH_TJ_AV_R " +
+        String sql = "SELECT COUNT(*) FROM GWH.GWH_TJ_AV_R " +
             "WHERE AVR_CPNY_COD = :cpny AND AVR_WHS_COD = :whs AND AVR_CUST_COD = :cust " +
             "AND AVR_AS_NUM = :avNum AND DEL_FLG = '0'";
         Query q = em.createNativeQuery(sql);
@@ -616,7 +616,7 @@ public class LpnRepository {
                                            String arrivalNumber, String status, String user) {
         String now = LocalDate.now().format(YMD_FORMATTER);
         String time = LocalTime.now().format(HMS_FORMATTER);
-        String sql = "UPDATE SGWH0001.GWH_TJ_AV_H " +
+        String sql = "UPDATE GWH.GWH_TJ_AV_H " +
             "SET AVH_AV_STS = :sts, " +
             "UPD_YMD = :updYmd, UPD_TIM = :updTim, UPD_TMID = 'GWH-WMS', " +
             "UPD_USER = :user, UPD_PGM = 'LPN_REMOVE', UPD_TM_ZONE = 'JST', " +
@@ -639,7 +639,7 @@ public class LpnRepository {
                                            String arrivalNumber, String status, String user) {
         String now = LocalDate.now().format(YMD_FORMATTER);
         String time = LocalTime.now().format(HMS_FORMATTER);
-        String sql = "UPDATE SGWH0001.GWH_TJ_AV_D " +
+        String sql = "UPDATE GWH.GWH_TJ_AV_D " +
             "SET AVD_AV_STS = :sts, " +
             "UPD_YMD = :updYmd, UPD_TIM = :updTim, UPD_TMID = 'GWH-WMS', " +
             "UPD_USER = :user, UPD_PGM = 'LPN_REMOVE', UPD_TM_ZONE = 'JST', " +
@@ -659,7 +659,7 @@ public class LpnRepository {
     }
 
     public void deleteLpnDetail(String cpny, String whs, String cust, String lpnNumber) {
-        String sql = "DELETE FROM SGWH0001.GWH_TJ_LPN_D " +
+        String sql = "DELETE FROM GWH.GWH_TJ_LPN_D " +
             "WHERE LPND_CPNY_COD = :cpny AND LPND_WHS_COD = :whs AND LPND_CUST_COD = :cust " +
             "AND LPND_LPN_NUM = :lpn";
         Query q = em.createNativeQuery(sql);
@@ -671,7 +671,7 @@ public class LpnRepository {
     }
 
     public void deleteLpnHeader(String cpny, String whs, String cust, String lpnNumber) {
-        String sql = "DELETE FROM SGWH0001.GWH_TJ_LPN " +
+        String sql = "DELETE FROM GWH.GWH_TJ_LPN " +
             "WHERE LPN_CPNY_COD = :cpny AND LPN_WHS_COD = :whs AND LPN_CUST_COD = :cust " +
             "AND LPN_NUM = :lpn";
         Query q = em.createNativeQuery(sql);

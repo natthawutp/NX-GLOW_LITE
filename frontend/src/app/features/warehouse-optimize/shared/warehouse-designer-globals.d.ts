@@ -8,6 +8,10 @@ export interface WarehouseDesignerAisleLike {
   height: number;
   type: string;
   direction?: string;
+  workingStatusFlow?: string | null;
+  workingStatusCode?: string | null;
+  workingStatusLabel?: string | null;
+  workingStatusColor?: string | null;
   levels: number;
   zone: string;
   bayWidth: number;
@@ -56,6 +60,10 @@ export interface WarehouseDesignerDrawer {
   zoomToFit(): void;
   render(): void;
   setupCanvas(): void;
+  resizeWarehouseBounds(
+    nextWidth: number,
+    nextHeight: number
+  ): { movedAisles: number; resizedAisles: number; adjustedBoundaryPoints: number };
   clearAll(): boolean;
   clearBoundary(): boolean;
   hasBoundary(): boolean;

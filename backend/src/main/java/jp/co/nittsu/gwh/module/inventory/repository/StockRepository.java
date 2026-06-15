@@ -1,5 +1,6 @@
 package jp.co.nittsu.gwh.module.inventory.repository;
 
+import jp.co.nittsu.gwh.config.OracleObjectNameResolver;
 import jp.co.nittsu.gwh.module.inventory.dto.StockDto;
 import jp.co.nittsu.gwh.module.inventory.dto.StockSearchRequest;
 import org.slf4j.Logger;
@@ -26,28 +27,20 @@ public class StockRepository {
 
     private static final Logger log = LoggerFactory.getLogger(StockRepository.class);
 
-    private static final String[] SOURCE_CANDIDATES = {
-            "VGWH_TJ_ST",
-            "SGWH0001.VGWH_TJ_ST"
-    };
-
-    private static final String[] PROD_CANDIDATES = {
-            "VGWH_TM_PROD",
-            "SGWH0001.VGWH_TM_PROD"
-    };
-
-    private static final String[] SBIV_CANDIDATES = {
-            "VGWH_TM_SBIV",
-            "SGWH0001.VGWH_TM_SBIV"
-    };
-
-    private static final String[] CUST_CANDIDATES = {
-            "VGWH_TM_CUST",
-            "SGWH0001.VGWH_TM_CUST"
-    };
+    private final String[] sourceCandidates;
+    private final String[] prodCandidates;
+    private final String[] sbivCandidates;
+    private final String[] custCandidates;
 
     @PersistenceContext
     private EntityManager em;
+
+    public StockRepository(OracleObjectNameResolver oracleObjectNameResolver) {
+        this.sourceCandidates = oracleObjectNameResolver.preferredCandidates("VGWH_TJ_ST");
+        this.prodCandidates = oracleObjectNameResolver.preferredCandidates("VGWH_TM_PROD");
+        this.sbivCandidates = oracleObjectNameResolver.preferredCandidates("VGWH_TM_SBIV");
+        this.custCandidates = oracleObjectNameResolver.preferredCandidates("VGWH_TM_CUST");
+    }
 
     // ---- Public methods ----
 
@@ -58,18 +51,18 @@ public class StockRepository {
             String cpny, String whs, String cust,
             StockSearchRequest request, boolean pieceMode, int maxRows) {
 
-        for (int i = 0; i < SOURCE_CANDIDATES.length; i++) {
+        for (int i = 0; i < sourceCandidates.length; i++) {
             try {
                 return searchFromSource(
-                        SOURCE_CANDIDATES[i],
-                        i < PROD_CANDIDATES.length ? PROD_CANDIDATES[i] : PROD_CANDIDATES[0],
-                        i < SBIV_CANDIDATES.length ? SBIV_CANDIDATES[i] : SBIV_CANDIDATES[0],
+                        sourceCandidates[i],
+                        i < prodCandidates.length ? prodCandidates[i] : prodCandidates[0],
+                        i < sbivCandidates.length ? sbivCandidates[i] : sbivCandidates[0],
                         cpny, whs, cust, request, pieceMode, maxRows);
             } catch (RuntimeException ex) {
                 if (!isObjectNotFound(ex)) {
                     throw ex;
                 }
-                if (i == SOURCE_CANDIDATES.length - 1) {
+                if (i == sourceCandidates.length - 1) {
                     throw ex;
                 }
             }
@@ -89,9 +82,9 @@ public class StockRepository {
         String groupBy = buildGroupByClause(request);
         String having = buildHavingClause(request);
 
-        String stSource = resolveSource(SOURCE_CANDIDATES);
-        String prodSource = resolveSource(PROD_CANDIDATES);
-        String sbivSource = resolveSource(SBIV_CANDIDATES);
+        String stSource = resolveSource(sourceCandidates);
+        String prodSource = resolveSource(prodCandidates);
+        String sbivSource = resolveSource(sbivCandidates);
 
         StringBuilder sql = new StringBuilder();
         sql.append("SELECT ");
@@ -148,9 +141,9 @@ public class StockRepository {
         String groupBy = buildGroupByClause(request);
         String having = buildHavingClause(request);
 
-        String stSource = resolveSource(SOURCE_CANDIDATES);
-        String prodSource = resolveSource(PROD_CANDIDATES);
-        String sbivSource = resolveSource(SBIV_CANDIDATES);
+        String stSource = resolveSource(sourceCandidates);
+        String prodSource = resolveSource(prodCandidates);
+        String sbivSource = resolveSource(sbivCandidates);
 
         StringBuilder inner = new StringBuilder();
         inner.append("SELECT 1 FROM ").append(stSource).append(" T1 ");
@@ -168,7 +161,7 @@ public class StockRepository {
      * Load customer preferences (PCSM flag, SBIV flag).
      */
     public CustomerPrefs loadCustomerPrefs(String cpny, String whs, String cust) {
-        String source = resolveSource(CUST_CANDIDATES);
+        String source = resolveSource(custCandidates);
         String sql = "SELECT CUST_PCSM_FLG, CUST_SBIV_FLG FROM " + source
                 + " WHERE CUST_CPNY_COD = :cpny AND CUST_WHS_COD = :whs"
                 + " AND CUST_COD = :cust AND DEL_FLG = '0'";
@@ -357,7 +350,7 @@ public class StockRepository {
 
         // Temp location filter (UNPIVOT subquery)
         if (request.isTempLocationOnly()) {
-            String custSource = resolveSource(CUST_CANDIDATES);
+            String custSource = resolveSource(custCandidates);
             where.append(" AND (NVL(ST_AREA_COD, '') || NVL(TRIM(ST_RACK_COD), '') || NVL(TRIM(ST_PSTN_COD), '') || NVL(TRIM(ST_LVL_COD), '')");
             where.append(" IN (SELECT NVL(TRIM(LOCATION), '') AS LOCATION FROM (");
             where.append(" SELECT TEMP_CODE, AREA||RACK||PSTN||LVL AS LOCATION FROM ").append(custSource);

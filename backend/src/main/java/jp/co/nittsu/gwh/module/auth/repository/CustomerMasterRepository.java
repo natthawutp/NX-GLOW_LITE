@@ -1,5 +1,6 @@
 package jp.co.nittsu.gwh.module.auth.repository;
 
+import jp.co.nittsu.gwh.config.OracleObjectNameResolver;
 import jp.co.nittsu.gwh.module.auth.dto.TenantOption;
 import org.springframework.stereotype.Repository;
 
@@ -16,17 +17,17 @@ import java.util.List;
 @Repository
 public class CustomerMasterRepository {
 
-    private static final String[] CUSTOMER_SOURCE_CANDIDATES = {
-            "VGWH_TM_CUST",
-            "GWH.VGWH_TM_CUST",
-            "SGWH0001.VGWH_TM_CUST",
-            "GWH_TM_CUST",
-            "GWH.GWH_TM_CUST",
-            "SGWH0001.GWH_TM_CUST"
-    };
+    private final String[] customerSourceCandidates;
 
     @PersistenceContext
     private EntityManager em;
+
+    public CustomerMasterRepository(OracleObjectNameResolver oracleObjectNameResolver) {
+        this.customerSourceCandidates = oracleObjectNameResolver.preferredCandidates(
+                "VGWH_TM_CUST",
+                "GWH_TM_CUST"
+        );
+    }
 
     /**
      * Find all active customer-warehouse combinations for a company.
@@ -34,7 +35,7 @@ public class CustomerMasterRepository {
     @SuppressWarnings("unchecked")
     public List<TenantOption> findTenantsByCompanyCode(String companyCode) {
         RuntimeException lastError = null;
-        for (String source : CUSTOMER_SOURCE_CANDIDATES) {
+        for (String source : customerSourceCandidates) {
             try {
                 String sql = "SELECT CUST_WHS_COD, CUST_COD, CUST_NAM1 " +
                         "FROM " + source + " " +
