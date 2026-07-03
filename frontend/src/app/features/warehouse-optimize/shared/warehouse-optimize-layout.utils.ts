@@ -1,4 +1,4 @@
-import {
+﻿import {
   LayoutStats,
   LayoutGeneratorConfig,
   LiveLocationState,
@@ -72,6 +72,21 @@ export function createGeneratedLayout(config: LayoutGeneratorConfig): WarehouseL
   const baysPerAisle = clampInt(config.baysPerAisle, 4, 120, 20);
   const levels = clampInt(config.levels, 1, 12, 4);
   const zonePrefix = (config.zonePrefix || 'Zone').trim();
+  const zoneStartNumber = clampInt(config.zoneStartNumber, 1, 999, 1);
+  const zoneNamingPattern = config.zoneNamingPattern || 'prefix-row';
+  const zoneSuffix = String(config.zoneSuffix || '').trim();
+  const customZonePattern = config.customZonePattern || '{prefix}-{row}';
+  const locationNamingPattern = config.locationNamingPattern || 'zone-row-bay-side-level';
+  const customLocationPattern = config.customLocationPattern || '{zone}-{row}-{bay}{side}-{level}';
+  const rowFormat = config.rowFormat || 'numeric';
+  const rowPadding = clampInt(config.rowPadding, 1, 4, 2);
+  const bayPadding = clampInt(config.bayPadding, 1, 4, 3);
+  const levelPrefix = String(config.levelPrefix || 'L').trim() || 'L';
+  const leftBayNumbering = config.leftBayNumbering || 'odd';
+  const rightBayNumbering = config.rightBayNumbering || 'even';
+  const rowNumberStart = clampInt(config.rowNumberStart, 1, 999, 1);
+  const bayNumberStart = clampInt(config.bayNumberStart, 1, 999, 1);
+  const levelNumberStart = clampInt(config.levelNumberStart, 1, 99, 1);
   const rackType = (config.rackType || 'HIGH_RACK').trim().toUpperCase();
   const bayWidth = toNumber(config.bayWidth, 1.2);
   const bayDepth = toNumber(config.bayDepth, 1);
@@ -81,34 +96,97 @@ export function createGeneratedLayout(config: LayoutGeneratorConfig): WarehouseL
   const warehouseWidth = Math.max(toNumber(config.warehouseWidth, DEFAULT_LAYOUT.warehouseWidth), startX + aisleCount * (bayDepth * 2 + aisleWidth) + 8);
   const warehouseHeight = Math.max(toNumber(config.warehouseHeight, DEFAULT_LAYOUT.warehouseHeight), startY + baysPerAisle * bayWidth + 8);
 
+  const formatRowValue = (value: number): string => {
+    switch (rowFormat) {
+      case 'alpha':
+        return numberToAlpha(value);
+      case 'alpha2':
+        return numberToAlpha2(value);
+      default:
+        return String(value).padStart(rowPadding, '0');
+    }
+  };
+
+  const formatZoneName = (rowValue: string): string => {
+    switch (zoneNamingPattern) {
+      case 'prefixrow':
+        return `${zonePrefix}${rowValue}${zoneSuffix}`;
+      case 'prefix-row-suffix':
+        return zoneSuffix ? `${zonePrefix}-${rowValue}-${zoneSuffix}` : `${zonePrefix}-${rowValue}`;
+      case 'custom':
+        return (customZonePattern || '{prefix}-{row}')
+          .replaceAll('{prefix}', zonePrefix)
+          .replaceAll('{row}', rowValue)
+          .replaceAll('{suffix}', zoneSuffix)
+          .replaceAll('--', '-');
+      default:
+        return zoneSuffix ? `${zonePrefix}-${rowValue}-${zoneSuffix}` : `${zonePrefix}-${rowValue}`;
+    }
+  };
+
+  const calculateBayNumber = (bayIndex: number, side: 'L' | 'R'): number => {
+    const numbering = side === 'L' ? leftBayNumbering : rightBayNumbering;
+    switch (numbering) {
+      case 'odd':
+        return (bayIndex - 1) * 2 + 1 + bayNumberStart - 1;
+      case 'even':
+        return bayIndex * 2 + bayNumberStart - 1;
+      default:
+        return bayNumberStart + bayIndex - 1;
+    }
+  };
+
+  const formatLocationName = (zone: string, rowNumber: number, bayIndex: number, side: 'L' | 'R', levelNumber: number): string => {
+    const row = formatRowValue(rowNumber);
+    const bay = String(calculateBayNumber(bayIndex, side)).padStart(bayPadding, '0');
+    const level = `${levelPrefix}${levelNumber}`;
+    switch (locationNamingPattern) {
+      case 'zone-row-bay-level':
+        return `${zone}-${row}-${bay}-${level}`;
+      case 'zone-bay-level':
+        return `${zone}-${bay}-${level}`;
+      case 'custom':
+        return (customLocationPattern || '{zone}-{row}-{bay}{side}-{level}')
+          .replaceAll('{zone}', zone)
+          .replaceAll('{row}', row)
+          .replaceAll('{bay}', bay)
+          .replaceAll('{side}', side)
+          .replaceAll('{level}', level);
+      default:
+        return `${zone}-${row}-${bay}${side}-${level}`;
+    }
+  };
+
   const aisles: WarehouseAisle[] = [];
   for (let aisleIndex = 0; aisleIndex < aisleCount; aisleIndex++) {
     const aisleNo = aisleIndex + 1;
-    const zone = `${zonePrefix}-${aisleNo}`;
+    const zoneSequence = zoneStartNumber + aisleIndex;
+    const rowValue = formatRowValue(zoneSequence);
+    const zone = formatZoneName(rowValue);
+    const rowNumber = rowNumberStart + aisleIndex;
     const x = startX + aisleIndex * (bayDepth * 2 + aisleWidth);
     const y = startY;
     const locations: WarehouseLayoutLocation[] = [];
 
     for (let bayIndex = 0; bayIndex < baysPerAisle; bayIndex++) {
       const position = bayIndex + 1;
-      const positionCode = `${position * 2 - 1}`.padStart(3, '0');
       const locationY = y + bayIndex * bayWidth;
 
-      for (const side of ['L', 'R']) {
+      for (const side of ['L', 'R'] as const) {
         const locationX = side === 'L' ? x : x + bayDepth + aisleWidth;
-        for (let level = 1; level <= levels; level++) {
-          const location: WarehouseLayoutLocation = {
-            location: `${zone}-${String(aisleNo).padStart(2, '0')}-${positionCode}${side}-L${level}`,
+        for (let levelOffset = 0; levelOffset < levels; levelOffset++) {
+          const levelNumber = levelNumberStart + levelOffset;
+          locations.push({
+            location: formatLocationName(zone, rowNumber, position, side, levelNumber),
             x: round(locationX),
             y: round(locationY),
             zone,
             type: rackType,
-            level,
-            aisle: aisleNo,
+            level: levelNumber,
+            aisle: rowNumber,
             position,
             side
-          };
-          locations.push(location);
+          });
         }
       }
     }
@@ -122,9 +200,11 @@ export function createGeneratedLayout(config: LayoutGeneratorConfig): WarehouseL
       type: rackType,
       levels,
       zone,
+      aisleCode: null,
       bayWidth: round(bayWidth),
       bayDepth: round(bayDepth),
       aisleWidth: round(aisleWidth),
+      lowerShelfLevels: 0,
       locations
     });
   }
@@ -146,6 +226,21 @@ export function parseLayoutText(layoutText: string): WarehouseLayout {
       baysPerAisle: 16,
       levels: 4,
       zonePrefix: 'Zone',
+      zoneStartNumber: 1,
+      zoneNamingPattern: 'prefix-row',
+      zoneSuffix: '',
+      customZonePattern: '{prefix}-{row}',
+      locationNamingPattern: 'zone-row-bay-side-level',
+      customLocationPattern: '{zone}-{row}-{bay}{side}-{level}',
+      rowFormat: 'numeric',
+      rowPadding: 2,
+      bayPadding: 3,
+      levelPrefix: 'L',
+      leftBayNumbering: 'odd',
+      rightBayNumbering: 'even',
+      rowNumberStart: 1,
+      bayNumberStart: 1,
+      levelNumberStart: 1,
       rackType: 'HIGH_RACK',
       bayWidth: 1.2,
       bayDepth: 1,
@@ -226,6 +321,21 @@ export function formatNumber(value: number | null | undefined, digits = 0): stri
   }).format(value);
 }
 
+export function aisleDisplayLabel(aisle: Pick<WarehouseAisle, 'zone' | 'aisleCode'> | null | undefined): string {
+  if (!aisle) {
+    return '-';
+  }
+  const zone = String(aisle.zone ?? '').trim();
+  const aisleCode = String(aisle.aisleCode ?? '').trim();
+  if (!aisleCode) {
+    return zone || '-';
+  }
+  if (!zone) {
+    return aisleCode;
+  }
+  return `${zone} / ${aisleCode}`;
+}
+
 function normalizeAisle(aisleRaw: Record<string, unknown>, fallbackId: number): WarehouseAisle {
   const locationsRaw = Array.isArray(aisleRaw['locations']) ? aisleRaw['locations'] : [];
   const bayWidth = toNumber(aisleRaw['bayWidth'], 1.2);
@@ -251,11 +361,13 @@ function normalizeAisle(aisleRaw: Record<string, unknown>, fallbackId: number): 
     workingStatusColor: aisleRaw['workingStatusColor'] ? String(aisleRaw['workingStatusColor']) : null,
     levels,
     zone,
+    aisleCode: aisleRaw['aisleCode'] ? String(aisleRaw['aisleCode']) : null,
     bayWidth,
     bayDepth,
     aisleWidth,
     tunnelLevelFrom: clampInt(aisleRaw['tunnelLevelFrom'], 1, 12, 1),
     tunnelLevelTo: clampInt(aisleRaw['tunnelLevelTo'], 1, 12, levels),
+    lowerShelfLevels: clampInt(aisleRaw['lowerShelfLevels'], 0, Math.max(levels - 1, 0), 0),
     pickFaceLevels: normalizeNumberArray(aisleRaw['pickFaceLevels']),
     startPointX: toNullableNumber(aisleRaw['startPointX']),
     startPointY: toNullableNumber(aisleRaw['startPointY']),
@@ -282,6 +394,8 @@ function normalizeLocation(
     side: rawSide === null ? null : (rawSide ? String(rawSide) : 'L'),
     x: toNumber(locationRaw['x'], 0),
     y: toNumber(locationRaw['y'], 0),
+    footprintWidth: toNullableNumber(locationRaw['footprintWidth']),
+    footprintDepth: toNullableNumber(locationRaw['footprintDepth']),
     slottedClass: locationRaw['slottedClass'] ? String(locationRaw['slottedClass']) : null,
     slottedSku: locationRaw['slottedSku'] ? String(locationRaw['slottedSku']) : null
   };
@@ -342,3 +456,23 @@ function normalizeLocationArray(raw: unknown, zone: string, type: string): Wareh
 
   return raw.map((locationRaw, index) => normalizeLocation(locationRaw as Record<string, unknown>, index + 1, zone, type));
 }
+
+function numberToAlpha(num: number): string {
+  let result = '';
+  let current = num;
+  while (current > 0) {
+    current--;
+    result = String.fromCharCode(65 + (current % 26)) + result;
+    current = Math.floor(current / 26);
+  }
+  return result || 'A';
+}
+
+function numberToAlpha2(num: number): string {
+  const safeNum = Math.max(1, num);
+  const first = Math.floor((safeNum - 1) / 26);
+  const second = (safeNum - 1) % 26;
+  return String.fromCharCode(65 + first) + String.fromCharCode(65 + second);
+}
+
+

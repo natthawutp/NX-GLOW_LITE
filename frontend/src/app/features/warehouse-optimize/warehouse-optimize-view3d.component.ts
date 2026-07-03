@@ -54,7 +54,7 @@ import { buildWorkingStatusZones } from './shared/warehouse-working-status.utils
         [label]="isSyncingStock ? 'Syncing Stock...' : 'Sync Stock Data'"
         [icon]="isSyncingStock ? 'pi pi-spinner pi-spin' : 'pi pi-sync'"
         class="p-button-sm"
-        [disabled]="!selectedProfileId || !selectedCustomerCode || isSyncingStock"
+        [disabled]="!canSyncStock"
         (click)="syncStock()">
       </button>
     </wms-page-header>
@@ -92,6 +92,12 @@ import { buildWorkingStatusZones } from './shared/warehouse-working-status.utils
         <span>Last sync</span>
         <strong>{{ snapshot?.syncedAt || 'Not synced' }}</strong>
       </div>
+      
+      <div class="status-card">
+        <span>Polling</span>
+        <strong>{{ pollingActive ? 'Every 60s' : 'Stopped' }}</strong>
+      </div>
+      <p></p>
       <div class="field field-search">
         <label>Search</label>
         <div class="search-row">
@@ -112,10 +118,6 @@ import { buildWorkingStatusZones } from './shared/warehouse-working-status.utils
             (click)="clearSearch()">
           </button>
         </div>
-      </div>
-      <div class="status-card">
-        <span>Polling</span>
-        <strong>{{ pollingActive ? 'Every 60s' : 'Stopped' }}</strong>
       </div>
       <div class="status-card">
         <span>Search Results</span>
@@ -520,6 +522,15 @@ export class WarehouseOptimizeView3dComponent implements OnDestroy {
     return `${this.searchMatches.length} matched`;
   }
 
+  get canSyncStock(): boolean {
+    if (!this.selectedProfileId || this.isSyncingStock || this.state.loadingCustomers()) {
+      return false;
+    }
+    const hasVisibleProfile = this.profileOptions.some(option => option.value === this.selectedProfileId);
+    const hasVisibleCustomer = this.customerOptions.some(option => option.value === this.selectedCustomerCode);
+    return hasVisibleProfile && hasVisibleCustomer;
+  }
+
   constructor() {
     this.state.initialize();
 
@@ -604,7 +615,12 @@ export class WarehouseOptimizeView3dComponent implements OnDestroy {
   }
 
   syncStock(): void {
-    if (!this.selectedProfileId || !this.selectedCustomerCode || this.isSyncingStock) {
+    if (!this.canSyncStock) {
+      return;
+    }
+    const profileId = this.selectedProfileId;
+    const customerCode = this.selectedCustomerCode;
+    if (!profileId || !customerCode) {
       return;
     }
     this.isSyncingStock = true;
@@ -612,8 +628,8 @@ export class WarehouseOptimizeView3dComponent implements OnDestroy {
     this.stockSyncStatusText = 'Syncing stock data...';
 
     this.service.syncStock(
-      this.selectedProfileId,
-      this.selectedCustomerCode,
+      profileId,
+      customerCode,
       this.currentLayoutOverride()
     ).pipe(
       finalize(() => {
@@ -652,7 +668,7 @@ export class WarehouseOptimizeView3dComponent implements OnDestroy {
         this.messageService.add({
           severity: 'error',
           summary: 'Stock sync failed',
-          detail: error?.error?.message || error?.message || 'Could not load live stock data for this warehouse.'
+          detail: this.resolveApiErrorMessage(error, 'Could not load live stock data for this warehouse.')
         });
       }
     });
@@ -673,13 +689,19 @@ export class WarehouseOptimizeView3dComponent implements OnDestroy {
 
   private startPolling(): void {
     this.stopPolling();
-    if (!this.selectedProfileId || !this.selectedCustomerCode || !this.snapshot?.cursor) {
+    const initialProfileId = this.selectedProfileId;
+    const initialCustomerCode = this.selectedCustomerCode;
+    const initialCursor = this.snapshot?.cursor;
+    if (!initialProfileId || !initialCustomerCode || !initialCursor) {
       return;
     }
 
     this.pollingActive = true;
     this.pollingSub = interval(60000).subscribe(() => {
-      if (!this.selectedProfileId || !this.selectedCustomerCode || !this.snapshot?.cursor) {
+      const profileId = this.selectedProfileId;
+      const customerCode = this.selectedCustomerCode;
+      const cursor = this.snapshot?.cursor;
+      if (!profileId || !customerCode || !cursor) {
         return;
       }
       if (this.isSyncingStock || this.isPollingDelta) {
@@ -690,9 +712,9 @@ export class WarehouseOptimizeView3dComponent implements OnDestroy {
       this.stockSyncState = 'syncing';
       this.stockSyncStatusText = 'Checking for live stock changes...';
       this.service.loadStockDelta(
-        this.selectedProfileId,
-        this.selectedCustomerCode,
-        this.snapshot.cursor,
+        profileId,
+        customerCode,
+        cursor,
         this.currentLayoutOverride()
       ).pipe(
         finalize(() => {
@@ -931,9 +953,56 @@ export class WarehouseOptimizeView3dComponent implements OnDestroy {
   }
 
   private currentLayoutOverride(): Record<string, unknown> | null {
-    return this.layout
-      ? this.layout as unknown as Record<string, unknown>
-      : null;
+    const draft = this.state.designDraft();
+    if (!this.layout || !draft || draft.profileId !== this.selectedProfileId) {
+      return null;
+    }
+
+    return {
+      warehouseWidth: this.layout.warehouseWidth,
+      warehouseHeight: this.layout.warehouseHeight,
+      boundaryPolygon: this.layout.boundaryPolygon ?? null,
+      aisles: this.layout.aisles.map(aisle => ({
+        id: aisle.id,
+        x: aisle.x,
+        y: aisle.y,
+        width: aisle.width,
+        height: aisle.height,
+        type: aisle.type,
+        direction: aisle.direction ?? null,
+        workingStatusFlow: aisle.workingStatusFlow ?? null,
+        workingStatusCode: aisle.workingStatusCode ?? null,
+        workingStatusLabel: aisle.workingStatusLabel ?? null,
+        workingStatusColor: aisle.workingStatusColor ?? null,
+        levels: aisle.levels,
+        zone: aisle.zone,
+        aisleCode: aisle.aisleCode ?? null,
+        bayWidth: aisle.bayWidth,
+        bayDepth: aisle.bayDepth,
+        aisleWidth: aisle.aisleWidth,
+        tunnelLevelFrom: aisle.tunnelLevelFrom ?? null,
+        tunnelLevelTo: aisle.tunnelLevelTo ?? null,
+        lowerShelfLevels: aisle.lowerShelfLevels ?? null,
+        pickFaceLevels: aisle.pickFaceLevels ?? null,
+        startPointX: aisle.startPointX ?? null,
+        startPointY: aisle.startPointY ?? null,
+        locations: aisle.locations.map(location => ({
+          location: location.location,
+          zone: location.zone,
+          type: location.type,
+          level: location.level,
+          aisle: location.aisle,
+          position: location.position,
+          side: location.side,
+          x: location.x,
+          y: location.y,
+          footprintWidth: location.footprintWidth ?? null,
+          footprintDepth: location.footprintDepth ?? null,
+          slottedClass: location.slottedClass ?? null,
+          slottedSku: location.slottedSku ?? null
+        }))
+      }))
+    };
   }
 
   private normalizeSearch(value: string | null | undefined): string {
@@ -950,6 +1019,20 @@ export class WarehouseOptimizeView3dComponent implements OnDestroy {
   private resetSyncFeedback(): void {
     this.stockSyncState = 'idle';
     this.stockSyncStatusText = '';
+  }
+
+  private resolveApiErrorMessage(error: unknown, fallback: string): string {
+    const apiError = error as {
+      error?: {
+        message?: string;
+        messages?: Array<{ message?: string; code?: string }>;
+      };
+      message?: string;
+    } | null;
+    return apiError?.error?.messages?.[0]?.message
+      || apiError?.error?.message
+      || apiError?.message
+      || fallback;
   }
 
   private resetWorkingStatusFeedback(): void {

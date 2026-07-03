@@ -111,14 +111,14 @@ import { environment } from '@env/environment';
             <!-- Email -->
             <div class="form-field">
               <label>{{ 'login.email' | translate }}</label>
-              <span class="p-input-icon-left" style="width: 100%">
+              <span class="p-input-icon-left email-input-shell">
                 <i class="pi pi-envelope"></i>
                 <input pInputText
                        type="email"
                        [(ngModel)]="loginData.email"
                        name="email"
                        [placeholder]="'login.email_placeholder' | translate"
-                       class="w-full"
+                       class="w-full email-input"
                        autocomplete="email"
                        required>
               </span>
@@ -396,6 +396,23 @@ import { environment } from '@env/environment';
       color: #374151;
     }
 
+    .email-input-shell {
+      display: block;
+      width: 100%;
+      position: relative;
+    }
+
+    .email-input {
+      padding-left: 2.75rem !important;
+    }
+
+    :host ::ng-deep .email-input-shell > i {
+      left: 0.95rem;
+      color: #9ca3af;
+      z-index: 1;
+      pointer-events: none;
+    }
+
     .form-actions-row {
       display: flex;
       align-items: center;
@@ -409,14 +426,22 @@ import { environment } from '@env/environment';
     .login-btn {
       width: 100%;
       height: 46px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
       font-size: 15px;
       font-weight: 600;
+      padding: 0 1.35rem !important;
       border-radius: 10px !important;
       background: linear-gradient(135deg, #1A005D, #2d0080) !important;
       border: none !important;
       color: #ffffff !important;
       margin-top: 4px;
       transition: transform 0.15s, box-shadow 0.15s !important;
+    }
+
+    :host ::ng-deep .login-btn .p-button-icon {
+      margin-right: 0.55rem;
     }
 
     .login-btn:hover:not(:disabled) {

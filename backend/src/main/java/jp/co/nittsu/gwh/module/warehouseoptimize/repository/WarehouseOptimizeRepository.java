@@ -19,6 +19,7 @@ import javax.persistence.Query;
 import javax.sql.DataSource;
 import java.math.BigDecimal;
 import java.sql.ResultSet;
+import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.time.LocalDateTime;
@@ -28,6 +29,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
@@ -46,9 +48,11 @@ public class WarehouseOptimizeRepository {
 
     private final JdbcTemplate jdbcTemplate;
     private final NamedParameterJdbcTemplate namedJdbcTemplate;
+    private final JdbcTemplate oracleJdbcTemplate;
     private final NamedParameterJdbcTemplate oracleNamedJdbcTemplate;
     private final ObjectMapper objectMapper;
     private final ConcurrentMap<String, String> sourceCache = new ConcurrentHashMap<>();
+    private final ConcurrentMap<String, Boolean> stockColumnPresenceCache = new ConcurrentHashMap<>();
     private final String[] oracleStockSourceCandidates;
     private final String[] oracleLocationSourceCandidates;
     private final String[] oracleAreaSourceCandidates;
@@ -68,11 +72,11 @@ public class WarehouseOptimizeRepository {
             OracleObjectNameResolver oracleObjectNameResolver) {
         this.jdbcTemplate = jdbcTemplate;
         this.namedJdbcTemplate = namedJdbcTemplate;
-        JdbcTemplate oracleJdbcTemplate = new JdbcTemplate(oracleDataSource);
-        oracleJdbcTemplate.setFetchSize(1000);
-        this.oracleNamedJdbcTemplate = new NamedParameterJdbcTemplate(oracleJdbcTemplate);
+        this.oracleJdbcTemplate = new JdbcTemplate(oracleDataSource);
+        this.oracleJdbcTemplate.setFetchSize(1000);
+        this.oracleNamedJdbcTemplate = new NamedParameterJdbcTemplate(this.oracleJdbcTemplate);
         this.objectMapper = objectMapper;
-        this.oracleStockSourceCandidates = oracleObjectNameResolver.preferredCandidates("GWH_TJ_ST", "VGWH_TJ_ST");
+        this.oracleStockSourceCandidates = oracleObjectNameResolver.preferredCandidates("VGWH_TJ_ST", "GWH_TJ_ST");
         this.oracleLocationSourceCandidates = oracleObjectNameResolver.preferredCandidates("GWH_TM_LOC");
         this.oracleAreaSourceCandidates = oracleObjectNameResolver.preferredCandidates("GWH_TM_AREA");
         this.oracleInboundHeaderSourceCandidates = oracleObjectNameResolver.preferredCandidates("GWH_TJ_AV_H", "VGWH_TJ_AV_H");
@@ -185,12 +189,24 @@ public class WarehouseOptimizeRepository {
                 "created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP" +
                 ")");
 
+        jdbcTemplate.execute("CREATE TABLE IF NOT EXISTS gwh_location_hierarchy_settings (" +
+                "id SERIAL PRIMARY KEY," +
+                "op_cpny_cod VARCHAR(50) NOT NULL," +
+                "op_whs_cod VARCHAR(50) NOT NULL," +
+                "op_cust_cod VARCHAR(50)," +
+                "mapping_data JSONB NOT NULL," +
+                "created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP," +
+                "updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP" +
+                ")");
+
         jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_woz_products_tenant ON gwh_products(op_cpny_cod, op_whs_cod, op_cust_cod)");
         jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_woz_profiles_scope ON gwh_warehouse_profiles(op_cpny_cod, op_whs_cod, op_cust_cod)");
         jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_woz_assignments_scope ON gwh_slot_assignment_layers(profile_id, op_cpny_cod, op_whs_cod, op_cust_cod)");
         jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_woz_orders_scope ON gwh_pick_order_layers(profile_id, op_cpny_cod, op_whs_cod, op_cust_cod)");
         jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_woz_order_lines_order ON gwh_order_line_layers(order_id)");
         jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_woz_results_order ON gwh_optimization_result_layers(order_id)");
+        jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_woz_hierarchy_scope ON gwh_location_hierarchy_settings(op_cpny_cod, op_whs_cod, op_cust_cod)");
+        jdbcTemplate.execute("CREATE UNIQUE INDEX IF NOT EXISTS uq_woz_hierarchy_scope ON gwh_location_hierarchy_settings(op_cpny_cod, op_whs_cod, COALESCE(op_cust_cod, ''))");
     }
 
     public List<WarehouseOptimizeModels.WarehouseProfileSummary> findProfiles(
@@ -600,15 +616,78 @@ public class WarehouseOptimizeRepository {
         return map;
     }
 
-    public List<Map<String, Object>> loadOracleStockRows(String companyCode, String warehouseCode, String customerCode, LocalDateTime cursor) {
+    public WarehouseOptimizeModels.WarehouseLocationHierarchySetting findLocationHierarchySetting(
+            String companyCode,
+            String warehouseCode,
+            String customerCode) {
+        String sql = "SELECT id, op_cpny_cod, op_whs_cod, op_cust_cod, mapping_data::text, created_at, updated_at " +
+                "FROM gwh_location_hierarchy_settings " +
+                "WHERE op_cpny_cod = :cpny AND op_whs_cod = :whs " +
+                hierarchyScopeCondition(customerCode) +
+                "LIMIT 1";
+        List<WarehouseOptimizeModels.WarehouseLocationHierarchySetting> settings = namedJdbcTemplate.query(
+                sql,
+                hierarchyScopeParams(companyCode, warehouseCode, customerCode),
+                (rs, rowNum) -> mapHierarchySetting(rs));
+        return settings.isEmpty() ? null : settings.get(0);
+    }
+
+    public WarehouseOptimizeModels.WarehouseLocationHierarchySetting saveLocationHierarchySetting(
+            String companyCode,
+            String warehouseCode,
+            String customerCode,
+            WarehouseOptimizeModels.WarehouseLocationHierarchyMapping mapping) {
+        String mappingJson = toJson(mapping);
+        Long existingId = namedJdbcTemplate.query(
+                "SELECT id FROM gwh_location_hierarchy_settings " +
+                        "WHERE op_cpny_cod = :cpny AND op_whs_cod = :whs " +
+                        hierarchyScopeCondition(customerCode) +
+                        "LIMIT 1",
+                hierarchyScopeParams(companyCode, warehouseCode, customerCode),
+                rs -> rs.next() ? rs.getLong(1) : null);
+        if (existingId != null) {
+            namedJdbcTemplate.update(
+                    "UPDATE gwh_location_hierarchy_settings " +
+                            "SET mapping_data = CAST(:mapping AS JSONB), updated_at = NOW() " +
+                            "WHERE id = :id",
+                    new MapSqlParameterSource()
+                            .addValue("id", existingId)
+                            .addValue("mapping", mappingJson));
+            return findLocationHierarchySetting(companyCode, warehouseCode, customerCode);
+        }
+
+        namedJdbcTemplate.update(
+                "INSERT INTO gwh_location_hierarchy_settings " +
+                        "(op_cpny_cod, op_whs_cod, op_cust_cod, mapping_data) " +
+                        "VALUES (:cpny, :whs, :cust, CAST(:mapping AS JSONB))",
+                new MapSqlParameterSource()
+                        .addValue("cpny", companyCode)
+                        .addValue("whs", warehouseCode)
+                        .addValue("cust", customerCode)
+                        .addValue("mapping", mappingJson));
+        return findLocationHierarchySetting(companyCode, warehouseCode, customerCode);
+    }
+
+    public void deleteLocationHierarchySetting(
+            String companyCode,
+            String warehouseCode,
+            String customerCode) {
+        namedJdbcTemplate.update(
+                "DELETE FROM gwh_location_hierarchy_settings " +
+                        "WHERE op_cpny_cod = :cpny AND op_whs_cod = :whs " +
+                        hierarchyScopeCondition(customerCode),
+                hierarchyScopeParams(companyCode, warehouseCode, customerCode));
+    }
+
+    public List<WarehouseOptimizeModels.OracleStockRow> loadOracleStockRows(String companyCode, String warehouseCode, String customerCode, LocalDateTime cursor) {
         RuntimeException lastException = null;
         for (String source : orderedCandidates(STOCK_SOURCE_CACHE_KEY, oracleStockSourceCandidates)) {
             try {
-                List<Map<String, Object>> rows = loadOracleStockRowsFromSource(source, companyCode, warehouseCode, customerCode, cursor);
+                List<WarehouseOptimizeModels.OracleStockRow> rows = loadOracleStockRowsFromSource(source, companyCode, warehouseCode, customerCode, cursor);
                 sourceCache.put(STOCK_SOURCE_CACHE_KEY, source);
                 return rows;
             } catch (RuntimeException ex) {
-                if (!isObjectNotFound(ex)) {
+                if (!isObjectNotFound(ex) && !isInvalidIdentifier(ex)) {
                     throw ex;
                 }
                 lastException = ex;
@@ -743,22 +822,22 @@ public class WarehouseOptimizeRepository {
         return Collections.emptyList();
     }
 
-    private List<Map<String, Object>> loadOracleStockRowsFromSource(
+    private List<WarehouseOptimizeModels.OracleStockRow> loadOracleStockRowsFromSource(
             String source,
             String companyCode,
             String warehouseCode,
             String customerCode,
             LocalDateTime cursor) {
-        String locationExpr =
-                "NVL(TRIM(TO_CHAR(ST_AREA_COD)), '') || " +
-                "NVL(TRIM(TO_CHAR(ST_RACK_COD)), '') || " +
-                "NVL(TRIM(TO_CHAR(ST_PSTN_COD)), '') || " +
-                "NVL(TRIM(TO_CHAR(ST_LVL_COD)), '')";
+        String locationExpr = stockTextColumnExpr(source, "ST_LOC_COD");
         String productExpr = "NVL(TRIM(TO_CHAR(ST_PROD_COD)), '')";
 
         StringBuilder sql = new StringBuilder();
         sql.append("SELECT ");
-        sql.append(locationExpr).append(" AS LOCATION, ");
+        sql.append(locationExpr).append(" AS ST_LOC_COD, ");
+        sql.append("TRIM(TO_CHAR(ST_AREA_COD)) AS ST_AREA_COD, ");
+        sql.append("TRIM(TO_CHAR(ST_RACK_COD)) AS ST_RACK_COD, ");
+        sql.append("TRIM(TO_CHAR(ST_PSTN_COD)) AS ST_PSTN_COD, ");
+        sql.append("TRIM(TO_CHAR(ST_LVL_COD)) AS ST_LVL_COD, ");
         sql.append(productExpr).append(" AS PRODUCT_CODE, ");
         sql.append("SUM(NVL(ST_PYST_QTY, 0)) AS PHYSICAL_QTY, ");
         sql.append("SUM(NVL(ST_AVST_QTY, 0)) AS AVAILABLE_QTY, ");
@@ -768,7 +847,13 @@ public class WarehouseOptimizeRepository {
         if (cursor != null) {
             sql.append("AND UPD_YMDHMS > :cursor ");
         }
-        sql.append("GROUP BY ").append(locationExpr).append(", ").append(productExpr);
+        sql.append("GROUP BY ");
+        sql.append(locationExpr).append(", ");
+        sql.append("TRIM(TO_CHAR(ST_AREA_COD)), ");
+        sql.append("TRIM(TO_CHAR(ST_RACK_COD)), ");
+        sql.append("TRIM(TO_CHAR(ST_PSTN_COD)), ");
+        sql.append("TRIM(TO_CHAR(ST_LVL_COD)), ");
+        sql.append(productExpr);
         MapSqlParameterSource params = new MapSqlParameterSource()
                 .addValue("cpny", companyCode)
                 .addValue("whs", warehouseCode)
@@ -778,14 +863,18 @@ public class WarehouseOptimizeRepository {
         }
 
         return oracleNamedJdbcTemplate.query(sql.toString(), params, rs -> {
-            List<Map<String, Object>> mapped = new ArrayList<>();
+            List<WarehouseOptimizeModels.OracleStockRow> mapped = new ArrayList<>();
             while (rs.next()) {
-                Map<String, Object> item = new HashMap<>();
-                item.put("location", trimmedValue(rs.getObject("LOCATION")));
-                item.put("productCode", trimmedValue(rs.getObject("PRODUCT_CODE")));
-                item.put("physicalQty", decimalValue(rs.getObject("PHYSICAL_QTY")));
-                item.put("availableQty", decimalValue(rs.getObject("AVAILABLE_QTY")));
-                item.put("updatedAt", toLocalDateTimeValue(rs.getObject("UPDATED_AT")));
+                WarehouseOptimizeModels.OracleStockRow item = new WarehouseOptimizeModels.OracleStockRow();
+                item.setLocationCode(trimmedValue(rs.getObject("ST_LOC_COD")));
+                item.setAreaCode(trimmedValue(rs.getObject("ST_AREA_COD")));
+                item.setRackCode(trimmedValue(rs.getObject("ST_RACK_COD")));
+                item.setPositionCode(trimmedValue(rs.getObject("ST_PSTN_COD")));
+                item.setLevelCode(trimmedValue(rs.getObject("ST_LVL_COD")));
+                item.setProductCode(trimmedValue(rs.getObject("PRODUCT_CODE")));
+                item.setPhysicalQty(decimalValue(rs.getObject("PHYSICAL_QTY")));
+                item.setAvailableQty(decimalValue(rs.getObject("AVAILABLE_QTY")));
+                item.setUpdatedAt(toLocalDateTimeValue(rs.getObject("UPDATED_AT")));
                 mapped.add(item);
             }
             return mapped;
@@ -936,6 +1025,8 @@ public class WarehouseOptimizeRepository {
                         location.setSide(text(locationNode, "side"));
                         location.setX(decimalValue(locationNode, "x"));
                         location.setY(decimalValue(locationNode, "y"));
+                        location.setFootprintWidth(decimalValue(locationNode, "footprintWidth"));
+                        location.setFootprintDepth(decimalValue(locationNode, "footprintDepth"));
                         location.setSlottedClass(text(locationNode, "slottedClass"));
                         location.setSlottedSku(text(locationNode, "slottedSku"));
                         locations.add(location);
@@ -964,6 +1055,21 @@ public class WarehouseOptimizeRepository {
         detail.setSharedProfile("*".equals(rs.getString("op_cust_cod")));
         detail.setLocations(parseLocations(detail.getLayoutData()));
         return detail;
+    }
+
+    private WarehouseOptimizeModels.WarehouseLocationHierarchySetting mapHierarchySetting(ResultSet rs) throws SQLException {
+        WarehouseOptimizeModels.WarehouseLocationHierarchySetting setting = new WarehouseOptimizeModels.WarehouseLocationHierarchySetting();
+        setting.setId(rs.getLong("id"));
+        setting.setCompanyCode(rs.getString("op_cpny_cod"));
+        setting.setWarehouseCode(rs.getString("op_whs_cod"));
+        setting.setCustomerCode(rs.getString("op_cust_cod"));
+        setting.setScope(rs.getString("op_cust_cod") == null
+                ? WarehouseOptimizeModels.WarehouseLocationHierarchyScope.WAREHOUSE
+                : WarehouseOptimizeModels.WarehouseLocationHierarchyScope.WAREHOUSE_CUSTOMER);
+        setting.setMapping(parseHierarchyMapping(rs.getString("mapping_data")));
+        setting.setCreatedAt(toLocalDateTime(rs.getTimestamp("created_at")));
+        setting.setUpdatedAt(toLocalDateTime(rs.getTimestamp("updated_at")));
+        return setting;
     }
 
     private RowMapper<WarehouseOptimizeModels.WarehouseProfileSummary> profileSummaryRowMapper() {
@@ -1061,6 +1167,36 @@ public class WarehouseOptimizeRepository {
         return timestamp == null ? null : timestamp.toLocalDateTime();
     }
 
+    private String hierarchyScopeCondition(String customerCode) {
+        return customerCode == null
+                ? "AND op_cust_cod IS NULL "
+                : "AND op_cust_cod = :cust ";
+    }
+
+    private MapSqlParameterSource hierarchyScopeParams(
+            String companyCode,
+            String warehouseCode,
+            String customerCode) {
+        MapSqlParameterSource params = new MapSqlParameterSource()
+                .addValue("cpny", companyCode)
+                .addValue("whs", warehouseCode);
+        if (customerCode != null) {
+            params.addValue("cust", customerCode);
+        }
+        return params;
+    }
+
+    private WarehouseOptimizeModels.WarehouseLocationHierarchyMapping parseHierarchyMapping(String json) {
+        if (json == null || json.trim().isEmpty()) {
+            return null;
+        }
+        try {
+            return objectMapper.readValue(json, WarehouseOptimizeModels.WarehouseLocationHierarchyMapping.class);
+        } catch (Exception ex) {
+            throw new IllegalStateException("Failed to parse warehouse location hierarchy mapping", ex);
+        }
+    }
+
     private LocalDateTime toLocalDateTimeValue(Object value) {
         if (value == null) {
             return null;
@@ -1087,6 +1223,42 @@ public class WarehouseOptimizeRepository {
             cursor = cursor.getCause();
         }
         return false;
+    }
+
+    private boolean isInvalidIdentifier(RuntimeException ex) {
+        Throwable cursor = ex;
+        while (cursor != null) {
+            String message = cursor.getMessage();
+            if (message != null && message.contains("ORA-00904")) {
+                return true;
+            }
+            cursor = cursor.getCause();
+        }
+        return false;
+    }
+
+    private String stockTextColumnExpr(String source, String columnName) {
+        return hasOracleColumn(source, columnName)
+                ? "TRIM(TO_CHAR(" + columnName + "))"
+                : "CAST(NULL AS VARCHAR2(255))";
+    }
+
+    private boolean hasOracleColumn(String source, String columnName) {
+        String cacheKey = source + "::" + columnName.toUpperCase(Locale.ROOT);
+        return stockColumnPresenceCache.computeIfAbsent(cacheKey, key -> loadOracleColumnPresence(source, columnName));
+    }
+
+    private boolean loadOracleColumnPresence(String source, String columnName) {
+        return oracleJdbcTemplate.query("SELECT * FROM " + source + " WHERE 1 = 0", rs -> {
+            ResultSetMetaData metaData = rs.getMetaData();
+            for (int index = 1; index <= metaData.getColumnCount(); index++) {
+                if (columnName.equalsIgnoreCase(metaData.getColumnLabel(index))
+                        || columnName.equalsIgnoreCase(metaData.getColumnName(index))) {
+                    return true;
+                }
+            }
+            return false;
+        });
     }
 
     private String resolveOptionalSource(String cacheKey, String[] candidates) {

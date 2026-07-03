@@ -1,5 +1,6 @@
 package jp.co.nittsu.gwh.module.warehouseoptimize.controller;
 
+import jp.co.nittsu.gwh.common.exception.GlobalExceptionHandler;
 import jp.co.nittsu.gwh.module.warehouseoptimize.dto.WarehouseOptimizeModels;
 import jp.co.nittsu.gwh.module.warehouseoptimize.service.WarehouseOptimizeService;
 import org.junit.jupiter.api.Test;
@@ -14,8 +15,13 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import java.math.BigDecimal;
 import java.util.Collections;
 
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -51,7 +57,7 @@ class WarehouseOptimizeControllerTest {
         response.setSummary(summary);
         response.setWarnings(Collections.singletonList("Skipped duplicate canonical location A01R1011."));
 
-        when(service.autoGenerateLayout()).thenReturn(response);
+        when(service.autoGenerateLayout((String) null)).thenReturn(response);
 
         mockMvc.perform(post("/api/v1/warehouse-optimize/layout/auto-generate")
                 .contentType(MediaType.APPLICATION_JSON)
@@ -94,5 +100,67 @@ class WarehouseOptimizeControllerTest {
             .andExpect(jsonPath("$.data.statuses[0].totalOrders").value(25))
             .andExpect(jsonPath("$.data.statuses[0].csQty").value(11))
             .andExpect(jsonPath("$.data.statuses[0].pcsQty").value(90));
+    }
+
+    @Test
+    void syncStockReturnsBadRequestWhenCustomerFilterIsInvalid() throws Exception {
+        MockMvc mockMvc = MockMvcBuilders.standaloneSetup(controller)
+                .setControllerAdvice(new GlobalExceptionHandler())
+                .build();
+
+        when(service.syncStock(eq(135L), eq("INVALID"), any()))
+                .thenThrow(new IllegalArgumentException("Customer filter is not authorized for this warehouse"));
+
+        mockMvc.perform(post("/api/v1/warehouse-optimize/viewer/135/sync-stock")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"customerCode\":\"INVALID\"}"))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.status").value("ERROR"))
+            .andExpect(jsonPath("$.messages[0].code").value("ERR0216"))
+            .andExpect(jsonPath("$.messages[0].message").value("Customer filter is not authorized for this warehouse"));
+    }
+
+    @Test
+    void locationHierarchyEndpointsReturnSuccessEnvelope() throws Exception {
+        MockMvc mockMvc = MockMvcBuilders.standaloneSetup(controller).build();
+
+        WarehouseOptimizeModels.WarehouseLocationHierarchyMapping mapping = new WarehouseOptimizeModels.WarehouseLocationHierarchyMapping();
+        mapping.setZone("AREA_CODE");
+        mapping.setBay("RACK_CODE");
+        mapping.setSlot(null);
+        mapping.setLevel("LEVEL_CODE");
+
+        WarehouseOptimizeModels.WarehouseLocationHierarchySetting warehouseDefault = new WarehouseOptimizeModels.WarehouseLocationHierarchySetting();
+        warehouseDefault.setId(10L);
+        warehouseDefault.setScope(WarehouseOptimizeModels.WarehouseLocationHierarchyScope.WAREHOUSE);
+        warehouseDefault.setMapping(mapping);
+
+        WarehouseOptimizeModels.WarehouseLocationHierarchyResponse response = new WarehouseOptimizeModels.WarehouseLocationHierarchyResponse();
+        response.setWarehouseDefault(warehouseDefault);
+        response.setEffective(warehouseDefault);
+
+        when(service.getLocationHierarchy(eq("MUJI"))).thenReturn(response);
+        when(service.saveLocationHierarchy(org.mockito.ArgumentMatchers.any())).thenReturn(response);
+        when(service.deleteLocationHierarchy("WAREHOUSE_CUSTOMER", "MUJI")).thenReturn(response);
+
+        mockMvc.perform(get("/api/v1/warehouse-optimize/location-hierarchy")
+                .param("customerCode", "MUJI"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.status").value("SUCCESS"))
+            .andExpect(jsonPath("$.data.effective.scope").value("WAREHOUSE"))
+            .andExpect(jsonPath("$.data.effective.mapping.zone").value("AREA_CODE"));
+
+        mockMvc.perform(put("/api/v1/warehouse-optimize/location-hierarchy")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"scope\":\"WAREHOUSE\",\"mapping\":{\"zone\":\"AREA_CODE\",\"bay\":\"RACK_CODE\",\"slot\":null,\"level\":\"LEVEL_CODE\"}}"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.status").value("SUCCESS"))
+            .andExpect(jsonPath("$.data.effective.mapping.bay").value("RACK_CODE"));
+
+        mockMvc.perform(delete("/api/v1/warehouse-optimize/location-hierarchy")
+                .param("scope", "WAREHOUSE_CUSTOMER")
+                .param("customerCode", "MUJI"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.status").value("SUCCESS"));
     }
 }

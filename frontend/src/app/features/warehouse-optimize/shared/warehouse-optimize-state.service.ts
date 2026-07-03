@@ -9,20 +9,18 @@ import {
 } from './warehouse-optimize.models';
 import { WarehouseOptimizeService } from './warehouse-optimize.service';
 
-const PROFILE_STORAGE_KEY = 'warehouse_optimize_profile_id';
-const CUSTOMER_STORAGE_KEY = 'warehouse_optimize_customer_code';
-
 @Injectable({ providedIn: 'root' })
 export class WarehouseOptimizeStateService {
   private readonly service = inject(WarehouseOptimizeService);
   private readonly authService = inject(AuthService);
+  private initializedScope: string | null = null;
 
   readonly profiles = signal<WarehouseProfileSummary[]>([]);
   readonly customers = signal<CustomerOption[]>([]);
   readonly selectedProfile = signal<WarehouseProfileDetail | null>(null);
   readonly designDraft = signal<WarehouseDesignDraft | null>(null);
-  readonly selectedProfileId = signal<number | null>(readStoredNumber(PROFILE_STORAGE_KEY));
-  readonly activeCustomerCode = signal<string>(localStorage.getItem(CUSTOMER_STORAGE_KEY) || this.authService.getCustomerCode());
+  readonly selectedProfileId = signal<number | null>(this.readStoredProfileId());
+  readonly activeCustomerCode = signal<string>(this.readStoredCustomerCode());
   readonly loadingProfiles = signal(false);
   readonly loadingCustomers = signal(false);
   readonly loadingProfile = signal(false);
@@ -32,10 +30,16 @@ export class WarehouseOptimizeStateService {
   );
 
   initialize(search = ''): void {
-    if (this.initialized()) {
+    const tenantScope = this.currentTenantScope();
+    if (this.initialized() && this.initializedScope === tenantScope) {
       return;
     }
+    const scopeChanged = this.initializedScope !== null && this.initializedScope !== tenantScope;
     this.initialized.set(true);
+    this.initializedScope = tenantScope;
+    if (scopeChanged) {
+      this.resetScopedState();
+    }
     const initialProfileId = this.selectedProfileId();
     if (initialProfileId && !this.selectedProfile()) {
       this.selectProfile(initialProfileId);
@@ -74,7 +78,9 @@ export class WarehouseOptimizeStateService {
       }
       if (profiles[0]) {
         this.selectProfile(profiles[0].id);
+        return;
       }
+      this.clearSelectedProfileState();
     });
   }
 
@@ -87,17 +93,20 @@ export class WarehouseOptimizeStateService {
       this.clearDesignDraft();
     }
     this.selectedProfileId.set(profileId);
-    localStorage.setItem(PROFILE_STORAGE_KEY, String(profileId));
+    localStorage.setItem(this.profileStorageKey(), String(profileId));
     this.loadingProfile.set(true);
     this.service.getProfile(profileId).pipe(
       finalize(() => this.loadingProfile.set(false))
-    ).subscribe(profile => this.selectedProfile.set(profile));
+    ).subscribe({
+      next: profile => this.selectedProfile.set(profile),
+      error: () => this.clearSelectedProfileState()
+    });
   }
 
   patchSelectedProfile(profile: WarehouseProfileDetail): void {
     this.selectedProfile.set(profile);
     this.selectedProfileId.set(profile.id);
-    localStorage.setItem(PROFILE_STORAGE_KEY, String(profile.id));
+    localStorage.setItem(this.profileStorageKey(), String(profile.id));
     this.profiles.update(list => {
       const index = list.findIndex(item => item.id === profile.id);
       const summary: WarehouseProfileSummary = {
@@ -124,7 +133,7 @@ export class WarehouseOptimizeStateService {
 
   setActiveCustomer(customerCode: string): void {
     this.activeCustomerCode.set(customerCode);
-    localStorage.setItem(CUSTOMER_STORAGE_KEY, customerCode);
+    localStorage.setItem(this.customerStorageKey(), customerCode);
   }
 
   setDesignDraft(draft: WarehouseDesignDraft): void {
@@ -133,6 +142,43 @@ export class WarehouseOptimizeStateService {
 
   clearDesignDraft(): void {
     this.designDraft.set(null);
+  }
+
+  private clearSelectedProfileState(): void {
+    this.selectedProfile.set(null);
+    this.selectedProfileId.set(null);
+    localStorage.removeItem(this.profileStorageKey());
+  }
+
+  private resetScopedState(): void {
+    this.customers.set([]);
+    this.profiles.set([]);
+    this.clearSelectedProfileState();
+    this.clearDesignDraft();
+  }
+
+  private currentTenantScope(): string {
+    return [
+      this.authService.getCompanyCode() || 'unknown-company',
+      this.authService.getWarehouseCode() || 'unknown-warehouse',
+      this.authService.getCustomerCode() || 'unknown-customer'
+    ].join(':');
+  }
+
+  private readStoredProfileId(): number | null {
+    return readStoredNumber(this.profileStorageKey());
+  }
+
+  private readStoredCustomerCode(): string {
+    return localStorage.getItem(this.customerStorageKey()) || this.authService.getCustomerCode();
+  }
+
+  private profileStorageKey(): string {
+    return scopedStorageKey('profile_id', this.authService);
+  }
+
+  private customerStorageKey(): string {
+    return scopedStorageKey('customer_code', this.authService);
   }
 }
 
@@ -143,4 +189,11 @@ function readStoredNumber(key: string): number | null {
   }
   const parsed = Number(raw);
   return Number.isFinite(parsed) ? parsed : null;
+}
+
+function scopedStorageKey(suffix: string, authService: AuthService): string {
+  const companyCode = authService.getCompanyCode() || 'unknown-company';
+  const warehouseCode = authService.getWarehouseCode() || 'unknown-warehouse';
+  const customerCode = authService.getCustomerCode() || 'unknown-customer';
+  return `warehouse_optimize_${suffix}:${companyCode}:${warehouseCode}:${customerCode}`;
 }

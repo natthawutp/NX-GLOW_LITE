@@ -9,6 +9,7 @@ import {
 } from './warehouse-optimize.models';
 import {
   assignmentByLocation,
+  aisleDisplayLabel,
   colorForLocation,
   extractLocations,
   liveStateByLocation
@@ -50,7 +51,7 @@ import {
               class="aisle-label"
               [attr.x]="padding + aisle.x + 0.75"
               [attr.y]="aisleY(aisle) - 0.5">
-              {{ aisle.zone }}
+              {{ aisleLabel(aisle) }}
             </text>
           </g>
 
@@ -228,6 +229,10 @@ export class WarehouseLayoutMapComponent {
     return aisle.id;
   }
 
+  aisleLabel(aisle: WarehouseAisle): string {
+    return aisleDisplayLabel(aisle);
+  }
+
   trackLocation(_: number, location: WarehouseLayoutLocation): string {
     return location.location;
   }
@@ -253,10 +258,18 @@ export class WarehouseLayoutMapComponent {
   }
 
   cellWidth(location: WarehouseLayoutLocation): number {
+    const explicit = Number(location.footprintWidth ?? NaN);
+    if (Number.isFinite(explicit) && explicit > 0) {
+      return explicit;
+    }
     return location.type === 'HIGH_RACK' ? 0.9 : 1.2;
   }
 
   cellHeight(location: WarehouseLayoutLocation): number {
+    const explicit = Number(location.footprintDepth ?? NaN);
+    if (Number.isFinite(explicit) && explicit > 0) {
+      return explicit;
+    }
     return location.type === 'HIGH_RACK' ? 0.9 : 1.1;
   }
 

@@ -48,10 +48,28 @@ public final class WarehouseOptimizeRequests {
     }
 
     public static class AutoGenerateLayoutRequest {
+        private String customerCode;
         private Map<String, Object> options;
 
+        public String getCustomerCode() { return customerCode; }
+        public void setCustomerCode(String customerCode) { this.customerCode = customerCode; }
         public Map<String, Object> getOptions() { return options; }
         public void setOptions(Map<String, Object> options) { this.options = options; }
+    }
+
+    public static class WarehouseLocationHierarchyRequest {
+        @NotBlank
+        private String scope;
+        private String customerCode;
+        @NotNull
+        private WarehouseOptimizeModels.WarehouseLocationHierarchyMapping mapping;
+
+        public String getScope() { return scope; }
+        public void setScope(String scope) { this.scope = scope; }
+        public String getCustomerCode() { return customerCode; }
+        public void setCustomerCode(String customerCode) { this.customerCode = customerCode; }
+        public WarehouseOptimizeModels.WarehouseLocationHierarchyMapping getMapping() { return mapping; }
+        public void setMapping(WarehouseOptimizeModels.WarehouseLocationHierarchyMapping mapping) { this.mapping = mapping; }
     }
 
     public static class UploadProductsRequest {

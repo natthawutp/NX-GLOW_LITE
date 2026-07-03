@@ -19,6 +19,7 @@ import {
   WorkingStatusZoneSnapshot
 } from './warehouse-optimize.models';
 import {
+  aisleDisplayLabel,
   assignmentByLocation,
   extractLocations,
   liveStateByLocation
@@ -64,7 +65,7 @@ type ThreeModule = typeof import('three');
           <span>Available Qty</span>
           <strong>{{ formatQuantity(hoverLiveState?.availableQty) }}</strong>
           <span>Zone</span>
-          <strong>{{ hoverLocation.zone || '-' }}</strong>
+          <strong>{{ hoverZoneLabel }}</strong>
           <span>Level</span>
           <strong>{{ hoverLocation.level ?? '-' }}</strong>
           <span>Updated</span>
@@ -301,6 +302,7 @@ export class WarehouseLiveSceneComponent implements AfterViewInit, OnChanges, On
   private resizeObserver?: ResizeObserver;
   private readonly meshMap = new Map<string, Mesh>();
   private readonly locationMap = new Map<string, WarehouseLayoutLocation>();
+  private readonly locationAisleLabelMap = new Map<string, string>();
   private readonly blinkUntil = new Map<string, number>();
   private readonly workingStatusBadgeElements = new Map<string, HTMLDivElement>();
   private highlightLocationSet = new Set<string>();
@@ -316,6 +318,13 @@ export class WarehouseLiveSceneComponent implements AfterViewInit, OnChanges, On
 
   get hoverStatusLabel(): string {
     return this.stockStatusLabel(this.hoverLiveState);
+  }
+
+  get hoverZoneLabel(): string {
+    if (!this.hoverLocation) {
+      return '-';
+    }
+    return this.locationAisleLabelMap.get(this.hoverLocation.location) || this.hoverLocation.zone || '-';
   }
 
   async ngAfterViewInit(): Promise<void> {
@@ -359,6 +368,7 @@ export class WarehouseLiveSceneComponent implements AfterViewInit, OnChanges, On
     this.clearWorkingStatusBadges();
     this.meshMap.clear();
     this.locationMap.clear();
+    this.locationAisleLabelMap.clear();
     this.blinkUntil.clear();
   }
 
@@ -502,9 +512,16 @@ export class WarehouseLiveSceneComponent implements AfterViewInit, OnChanges, On
       this.statusZoneGroup.add(mesh);
     }
 
+    for (const aisle of this.layout.aisles) {
+      const aisleLabel = aisleDisplayLabel(aisle);
+      for (const location of aisle.locations) {
+        this.locationMap.set(location.location, location);
+        this.locationAisleLabelMap.set(location.location, aisleLabel);
+      }
+    }
+
     const locations = extractLocations(this.layout);
     for (const location of locations) {
-      this.locationMap.set(location.location, location);
       const material = new THREE.MeshStandardMaterial({
         color: this.meshColor(location, liveStateByLocation(this.liveStates).get(location.location)),
         roughness: 0.45,
@@ -743,10 +760,18 @@ export class WarehouseLiveSceneComponent implements AfterViewInit, OnChanges, On
   }
 
   private meshWidth(location: WarehouseLayoutLocation): number {
+    const explicit = Number(location.footprintWidth ?? NaN);
+    if (Number.isFinite(explicit) && explicit > 0) {
+      return explicit;
+    }
     return location.type === 'HIGH_RACK' ? 0.9 : 1.2;
   }
 
   private meshDepth(location: WarehouseLayoutLocation): number {
+    const explicit = Number(location.footprintDepth ?? NaN);
+    if (Number.isFinite(explicit) && explicit > 0) {
+      return explicit;
+    }
     return location.type === 'HIGH_RACK' ? 0.9 : 1.2;
   }
 

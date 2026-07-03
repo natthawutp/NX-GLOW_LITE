@@ -14,11 +14,13 @@ export interface WarehouseDesignerAisleLike {
   workingStatusColor?: string | null;
   levels: number;
   zone: string;
+  aisleCode?: string | null;
   bayWidth: number;
   bayDepth: number;
   aisleWidth: number;
   tunnelLevelFrom?: number;
   tunnelLevelTo?: number;
+  lowerShelfLevels?: number | null;
   pickFaceLevels?: number[];
   startPointX?: number;
   startPointY?: number;

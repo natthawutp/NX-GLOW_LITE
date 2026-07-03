@@ -69,6 +69,8 @@ public final class WarehouseOptimizeModels {
         private String side;
         private BigDecimal x;
         private BigDecimal y;
+        private BigDecimal footprintWidth;
+        private BigDecimal footprintDepth;
         private String slottedClass;
         private String slottedSku;
 
@@ -90,6 +92,10 @@ public final class WarehouseOptimizeModels {
         public void setX(BigDecimal x) { this.x = x; }
         public BigDecimal getY() { return y; }
         public void setY(BigDecimal y) { this.y = y; }
+        public BigDecimal getFootprintWidth() { return footprintWidth; }
+        public void setFootprintWidth(BigDecimal footprintWidth) { this.footprintWidth = footprintWidth; }
+        public BigDecimal getFootprintDepth() { return footprintDepth; }
+        public void setFootprintDepth(BigDecimal footprintDepth) { this.footprintDepth = footprintDepth; }
         public String getSlottedClass() { return slottedClass; }
         public void setSlottedClass(String slottedClass) { this.slottedClass = slottedClass; }
         public String getSlottedSku() { return slottedSku; }
@@ -116,11 +122,13 @@ public final class WarehouseOptimizeModels {
         private String direction;
         private Integer levels;
         private String zone;
+        private String aisleCode;
         private BigDecimal bayWidth;
         private BigDecimal bayDepth;
         private BigDecimal aisleWidth;
         private Integer tunnelLevelFrom;
         private Integer tunnelLevelTo;
+        private Integer lowerShelfLevels;
         private List<Integer> pickFaceLevels = new ArrayList<>();
         private BigDecimal startPointX;
         private BigDecimal startPointY;
@@ -145,6 +153,8 @@ public final class WarehouseOptimizeModels {
         public void setLevels(Integer levels) { this.levels = levels; }
         public String getZone() { return zone; }
         public void setZone(String zone) { this.zone = zone; }
+        public String getAisleCode() { return aisleCode; }
+        public void setAisleCode(String aisleCode) { this.aisleCode = aisleCode; }
         public BigDecimal getBayWidth() { return bayWidth; }
         public void setBayWidth(BigDecimal bayWidth) { this.bayWidth = bayWidth; }
         public BigDecimal getBayDepth() { return bayDepth; }
@@ -155,6 +165,8 @@ public final class WarehouseOptimizeModels {
         public void setTunnelLevelFrom(Integer tunnelLevelFrom) { this.tunnelLevelFrom = tunnelLevelFrom; }
         public Integer getTunnelLevelTo() { return tunnelLevelTo; }
         public void setTunnelLevelTo(Integer tunnelLevelTo) { this.tunnelLevelTo = tunnelLevelTo; }
+        public Integer getLowerShelfLevels() { return lowerShelfLevels; }
+        public void setLowerShelfLevels(Integer lowerShelfLevels) { this.lowerShelfLevels = lowerShelfLevels; }
         public List<Integer> getPickFaceLevels() { return pickFaceLevels; }
         public void setPickFaceLevels(List<Integer> pickFaceLevels) { this.pickFaceLevels = pickFaceLevels; }
         public BigDecimal getStartPointX() { return startPointX; }
@@ -190,6 +202,13 @@ public final class WarehouseOptimizeModels {
         private int inferredPositions;
         private int inferredLevels;
         private int skippedRows;
+        private BigDecimal warehouseWidth;
+        private BigDecimal warehouseHeight;
+        private int normalizedDimensionRows;
+        private int normalizedHeightRows;
+        private int rotatedAreas;
+        private int mixedAreasDetected;
+        private int mixedAreasUncertain;
 
         public int getAreas() { return areas; }
         public void setAreas(int areas) { this.areas = areas; }
@@ -203,6 +222,20 @@ public final class WarehouseOptimizeModels {
         public void setInferredLevels(int inferredLevels) { this.inferredLevels = inferredLevels; }
         public int getSkippedRows() { return skippedRows; }
         public void setSkippedRows(int skippedRows) { this.skippedRows = skippedRows; }
+        public BigDecimal getWarehouseWidth() { return warehouseWidth; }
+        public void setWarehouseWidth(BigDecimal warehouseWidth) { this.warehouseWidth = warehouseWidth; }
+        public BigDecimal getWarehouseHeight() { return warehouseHeight; }
+        public void setWarehouseHeight(BigDecimal warehouseHeight) { this.warehouseHeight = warehouseHeight; }
+        public int getNormalizedDimensionRows() { return normalizedDimensionRows; }
+        public void setNormalizedDimensionRows(int normalizedDimensionRows) { this.normalizedDimensionRows = normalizedDimensionRows; }
+        public int getNormalizedHeightRows() { return normalizedHeightRows; }
+        public void setNormalizedHeightRows(int normalizedHeightRows) { this.normalizedHeightRows = normalizedHeightRows; }
+        public int getRotatedAreas() { return rotatedAreas; }
+        public void setRotatedAreas(int rotatedAreas) { this.rotatedAreas = rotatedAreas; }
+        public int getMixedAreasDetected() { return mixedAreasDetected; }
+        public void setMixedAreasDetected(int mixedAreasDetected) { this.mixedAreasDetected = mixedAreasDetected; }
+        public int getMixedAreasUncertain() { return mixedAreasUncertain; }
+        public void setMixedAreasUncertain(int mixedAreasUncertain) { this.mixedAreasUncertain = mixedAreasUncertain; }
     }
 
     public static class AutoGeneratedLayoutResponse {
@@ -247,6 +280,113 @@ public final class WarehouseOptimizeModels {
         public void setWidth(BigDecimal width) { this.width = width; }
         public BigDecimal getHeight() { return height; }
         public void setHeight(BigDecimal height) { this.height = height; }
+    }
+
+    public static class OracleStockRow {
+        private String locationCode;
+        private String areaCode;
+        private String rackCode;
+        private String positionCode;
+        private String levelCode;
+        private String productCode;
+        private BigDecimal physicalQty;
+        private BigDecimal availableQty;
+        private LocalDateTime updatedAt;
+
+        public String getLocationCode() { return locationCode; }
+        public void setLocationCode(String locationCode) { this.locationCode = locationCode; }
+        public String getAreaCode() { return areaCode; }
+        public void setAreaCode(String areaCode) { this.areaCode = areaCode; }
+        public String getRackCode() { return rackCode; }
+        public void setRackCode(String rackCode) { this.rackCode = rackCode; }
+        public String getPositionCode() { return positionCode; }
+        public void setPositionCode(String positionCode) { this.positionCode = positionCode; }
+        public String getLevelCode() { return levelCode; }
+        public void setLevelCode(String levelCode) { this.levelCode = levelCode; }
+        public String getProductCode() { return productCode; }
+        public void setProductCode(String productCode) { this.productCode = productCode; }
+        public BigDecimal getPhysicalQty() { return physicalQty; }
+        public void setPhysicalQty(BigDecimal physicalQty) { this.physicalQty = physicalQty; }
+        public BigDecimal getAvailableQty() { return availableQty; }
+        public void setAvailableQty(BigDecimal availableQty) { this.availableQty = availableQty; }
+        public LocalDateTime getUpdatedAt() { return updatedAt; }
+        public void setUpdatedAt(LocalDateTime updatedAt) { this.updatedAt = updatedAt; }
+    }
+
+    public static class WarehouseLocationHierarchyScope {
+        public static final String WAREHOUSE = "WAREHOUSE";
+        public static final String WAREHOUSE_CUSTOMER = "WAREHOUSE_CUSTOMER";
+
+        private WarehouseLocationHierarchyScope() {}
+    }
+
+    public static class WarehouseLocationHierarchySource {
+        public static final String AREA_CODE = "AREA_CODE";
+        public static final String RACK_CODE = "RACK_CODE";
+        public static final String POSITION_CODE = "POSITION_CODE";
+        public static final String LEVEL_CODE = "LEVEL_CODE";
+
+        private WarehouseLocationHierarchySource() {}
+    }
+
+    public static class WarehouseLocationHierarchyMapping {
+        private String zone;
+        private String aisle;
+        private String bay;
+        private String slot;
+        private String level;
+
+        public String getZone() { return zone; }
+        public void setZone(String zone) { this.zone = zone; }
+        public String getAisle() { return aisle; }
+        public void setAisle(String aisle) { this.aisle = aisle; }
+        public String getBay() { return bay; }
+        public void setBay(String bay) { this.bay = bay; }
+        public String getSlot() { return slot; }
+        public void setSlot(String slot) { this.slot = slot; }
+        public String getLevel() { return level; }
+        public void setLevel(String level) { this.level = level; }
+    }
+
+    public static class WarehouseLocationHierarchySetting {
+        private Long id;
+        private String scope;
+        private String companyCode;
+        private String warehouseCode;
+        private String customerCode;
+        private WarehouseLocationHierarchyMapping mapping;
+        private LocalDateTime createdAt;
+        private LocalDateTime updatedAt;
+
+        public Long getId() { return id; }
+        public void setId(Long id) { this.id = id; }
+        public String getScope() { return scope; }
+        public void setScope(String scope) { this.scope = scope; }
+        public String getCompanyCode() { return companyCode; }
+        public void setCompanyCode(String companyCode) { this.companyCode = companyCode; }
+        public String getWarehouseCode() { return warehouseCode; }
+        public void setWarehouseCode(String warehouseCode) { this.warehouseCode = warehouseCode; }
+        public String getCustomerCode() { return customerCode; }
+        public void setCustomerCode(String customerCode) { this.customerCode = customerCode; }
+        public WarehouseLocationHierarchyMapping getMapping() { return mapping; }
+        public void setMapping(WarehouseLocationHierarchyMapping mapping) { this.mapping = mapping; }
+        public LocalDateTime getCreatedAt() { return createdAt; }
+        public void setCreatedAt(LocalDateTime createdAt) { this.createdAt = createdAt; }
+        public LocalDateTime getUpdatedAt() { return updatedAt; }
+        public void setUpdatedAt(LocalDateTime updatedAt) { this.updatedAt = updatedAt; }
+    }
+
+    public static class WarehouseLocationHierarchyResponse {
+        private WarehouseLocationHierarchySetting warehouseDefault;
+        private WarehouseLocationHierarchySetting customerOverride;
+        private WarehouseLocationHierarchySetting effective;
+
+        public WarehouseLocationHierarchySetting getWarehouseDefault() { return warehouseDefault; }
+        public void setWarehouseDefault(WarehouseLocationHierarchySetting warehouseDefault) { this.warehouseDefault = warehouseDefault; }
+        public WarehouseLocationHierarchySetting getCustomerOverride() { return customerOverride; }
+        public void setCustomerOverride(WarehouseLocationHierarchySetting customerOverride) { this.customerOverride = customerOverride; }
+        public WarehouseLocationHierarchySetting getEffective() { return effective; }
+        public void setEffective(WarehouseLocationHierarchySetting effective) { this.effective = effective; }
     }
 
     public static class WarehouseProfileDetail extends WarehouseProfileSummary {

@@ -891,6 +891,7 @@ class AisleDrawer {
             );
             aisle.locations = aisleData.locations;
             aisle.baseLocations = aisleData.baseLocations || [...aisle.locations];
+            aisle.aisleCode = aisleData.aisleCode || null;
             aisle.bayWidth = aisleData.bayWidth;
             aisle.bayDepth = aisleData.bayDepth;
             aisle.aisleWidth = aisleData.aisleWidth;
@@ -1297,6 +1298,10 @@ class AisleDrawer {
         newAisle.bayDepth = aisle.bayDepth;
         newAisle.aisleWidth = aisle.aisleWidth;
         newAisle.direction = aisle.direction || 'AUTO';
+        newAisle.aisleCode = aisle.aisleCode || null;
+        newAisle.lowerShelfLevels = Number.isFinite(Number(aisle.lowerShelfLevels))
+            ? Math.min(Math.max(0, Math.round(Number(aisle.lowerShelfLevels))), Math.max(Number(aisle.levels || 1) - 1, 0))
+            : 0;
         newAisle.pickFaceLevels = Array.isArray(aisle.pickFaceLevels) ? [...aisle.pickFaceLevels] : undefined;
         newAisle.startPointX = aisle.startPointX;
         newAisle.startPointY = aisle.startPointY;
@@ -1756,7 +1761,7 @@ class AisleDrawer {
         const centerY = aisle.y + aisle.height / 2;
 
         this.drawFlippedText(
-            aisle.zone,
+            aisle.aisleCode ? `${aisle.zone} / ${aisle.aisleCode}` : aisle.zone,
             centerX,
             centerY,
             {
@@ -2361,9 +2366,13 @@ class AisleDrawer {
                 workingStatusColor: a.workingStatusColor || null,
                 levels: a.levels,
                 zone: a.zone,
+                aisleCode: a.aisleCode || null,
                 bayWidth: a.bayWidth,
                 bayDepth: a.bayDepth,
                 aisleWidth: a.aisleWidth,
+                lowerShelfLevels: Number.isFinite(Number(a.lowerShelfLevels))
+                    ? Math.min(Math.max(0, Math.round(Number(a.lowerShelfLevels))), Math.max(Number(a.levels || 1) - 1, 0))
+                    : 0,
                 pickFaceLevels: a.pickFaceLevels || null,
                 tunnelLevelFrom: a.tunnelLevelFrom || 1,
                 tunnelLevelTo: a.tunnelLevelTo || a.levels || 1,
@@ -2382,6 +2391,7 @@ class AisleDrawer {
         this.aisles = data.aisles.map(a => {
             const aisle = new Aisle(a.id, a.x, a.y, a.width, a.height, a.type, a.levels, a.zone);
             aisle.direction = a.direction || 'AUTO';
+            aisle.aisleCode = a.aisleCode || null;
             aisle.workingStatusFlow = a.workingStatusFlow || null;
             aisle.workingStatusCode = a.workingStatusCode || null;
             aisle.workingStatusLabel = a.workingStatusLabel || null;
@@ -2389,6 +2399,9 @@ class AisleDrawer {
             aisle.bayWidth = a.bayWidth;
             aisle.bayDepth = a.bayDepth;
             aisle.aisleWidth = a.aisleWidth;
+            aisle.lowerShelfLevels = Number.isFinite(Number(a.lowerShelfLevels))
+                ? Math.min(Math.max(0, Math.round(Number(a.lowerShelfLevels))), Math.max(Number(a.levels || 1) - 1, 0))
+                : 0;
             aisle.pickFaceLevels = Array.isArray(a.pickFaceLevels) ? [...a.pickFaceLevels] : undefined;
             aisle.tunnelLevelFrom = a.tunnelLevelFrom || 1;
             aisle.tunnelLevelTo = a.tunnelLevelTo || a.levels || 1;
@@ -2533,6 +2546,7 @@ class Aisle {
         this.type = type;
         this.levels = levels;
         this.zone = zone;
+        this.aisleCode = null;
         this.locations = [];
 
         // Configurable dimensions
@@ -2549,6 +2563,7 @@ class Aisle {
         this.tunnelLevelTo = Math.max(1, levels || 1);
         this.tunnelRules = [];
         this.baseLocations = [];
+        this.lowerShelfLevels = 0;
         this.workingStatusFlow = null;
         this.workingStatusCode = null;
         this.workingStatusLabel = null;
@@ -2689,6 +2704,7 @@ class Aisle {
 
     updateProperties(props) {
         if (props.zone !== undefined) this.zone = props.zone;
+        if (props.aisleCode !== undefined) this.aisleCode = props.aisleCode;
         if (props.type !== undefined) this.type = props.type;
         if (props.direction !== undefined) {
             const desiredDirection = String(props.direction || 'AUTO').toUpperCase();
@@ -2701,6 +2717,7 @@ class Aisle {
         if (props.bayWidth !== undefined) this.bayWidth = props.bayWidth;
         if (props.bayDepth !== undefined) this.bayDepth = props.bayDepth;
         if (props.aisleWidth !== undefined) this.aisleWidth = props.aisleWidth;
+        if (props.lowerShelfLevels !== undefined) this.lowerShelfLevels = props.lowerShelfLevels;
         if (props.pickFaceLevels !== undefined) this.pickFaceLevels = props.pickFaceLevels;
         if (props.startPointX !== undefined) this.startPointX = props.startPointX;
         if (props.startPointY !== undefined) this.startPointY = props.startPointY;
@@ -2716,6 +2733,15 @@ class Aisle {
         const tunnelTo = Math.max(1, Number(this.tunnelLevelTo || this.levels || 1));
         this.tunnelLevelFrom = Math.min(tunnelFrom, tunnelTo);
         this.tunnelLevelTo = Math.max(tunnelFrom, tunnelTo);
+        if (this.type !== 'HIGH_RACK') {
+            this.lowerShelfLevels = 0;
+        } else {
+            const maxLowerShelfLevels = Math.max(0, Number(this.levels || 1) - 1);
+            const parsedLowerShelfLevels = Math.round(Number(this.lowerShelfLevels || 0));
+            this.lowerShelfLevels = Number.isFinite(parsedLowerShelfLevels)
+                ? Math.min(maxLowerShelfLevels, Math.max(0, parsedLowerShelfLevels))
+                : 0;
+        }
         if (this.type === 'TUNNEL_ZONE') {
             this.levels = Math.max(Number(this.levels || 1), this.tunnelLevelTo);
         }
@@ -2797,6 +2823,14 @@ class Aisle {
         const levelFrom = this.namingConfig?.levelFrom || 1;
         const levelTo = this.namingConfig?.levelTo || this.levels;
         const numLevels = levelTo - levelFrom + 1;
+        const lowerShelfLevels = this.type === 'HIGH_RACK'
+            ? Math.min(Math.max(0, Math.round(Number(this.lowerShelfLevels || 0))), Math.max(0, Number(this.levels || 1) - 1))
+            : 0;
+        const locationTypeForLevel = level => (
+            this.type === 'HIGH_RACK' && level <= lowerShelfLevels
+                ? 'SHELF'
+                : this.type
+        );
 
         // For drive-in racks, single side only
         if (this.type === 'DRIVE_IN') {
@@ -2896,7 +2930,7 @@ class Aisle {
                         x: locX,
                         y: locY,
                         zone: this.zone,
-                        type: this.type,
+                        type: locationTypeForLevel(level),
                         level: level,
                         aisle: aisleNum,
                         position: pos + 1,
@@ -2921,7 +2955,7 @@ class Aisle {
                         x: locX,
                         y: locY,
                         zone: this.zone,
-                        type: this.type,
+                        type: locationTypeForLevel(level),
                         level: level,
                         aisle: aisleNum,
                         position: pos + 1,

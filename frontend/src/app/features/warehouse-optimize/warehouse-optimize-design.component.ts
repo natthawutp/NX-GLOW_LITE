@@ -1,4 +1,4 @@
-import { CommonModule } from '@angular/common';
+﻿import { CommonModule } from '@angular/common';
 import {
   AfterViewInit,
   Component,
@@ -21,9 +21,14 @@ import {
   LayoutGeneratorConfig,
   LayoutStats,
   WarehouseAisle,
-  WarehouseDesignerLayout
+  WarehouseDesignerLayout,
+  WarehouseLocationHierarchyMapping,
+  WarehouseLocationHierarchyResponse,
+  WarehouseLocationHierarchyScope,
+  WarehouseLocationHierarchySource
 } from './shared/warehouse-optimize.models';
 import {
+  aisleDisplayLabel,
   createEmptyLayout,
   createGeneratedLayout,
   layoutStats,
@@ -38,6 +43,7 @@ import {
 
 type DesignerMode = 'draw' | 'boundary' | 'select' | 'move' | 'delete' | 'measure';
 type SaveState = 'idle' | 'dirty' | 'saving' | 'success' | 'error';
+type GenerateState = 'idle' | 'generating' | 'success' | 'error';
 
 interface PropertyFormModel {
   zone: string;
@@ -50,6 +56,7 @@ interface PropertyFormModel {
   levels: number;
   tunnelLevelFrom: number;
   tunnelLevelTo: number;
+  lowerShelfLevels: number;
   bayWidth: number;
   bayDepth: number;
   aisleWidth: number;
@@ -57,6 +64,16 @@ interface PropertyFormModel {
   startPointX: number;
   startPointY: number;
 }
+
+interface HierarchyFormModel {
+  zone: WarehouseLocationHierarchySource | '';
+  aisle: WarehouseLocationHierarchySource | '';
+  bay: WarehouseLocationHierarchySource;
+  slot: WarehouseLocationHierarchySource | '';
+  level: WarehouseLocationHierarchySource;
+}
+
+type CollapsiblePanelKey = 'profile' | 'hierarchy' | 'zones' | 'statistics' | 'quickGenerate';
 
 const DESIGNER_SCRIPT_PATH = 'assets/warehouse-optimize/aisle-drawer.js';
 
@@ -103,6 +120,18 @@ const MODE_HINTS: Record<DesignerMode, string> = {
   delete: 'Click a zone or boundary edge to remove it.',
   measure: 'Drag between two points to measure distance.'
 };
+
+const HIERARCHY_SCOPE_OPTIONS: Array<{ value: WarehouseLocationHierarchyScope; label: string }> = [
+  { value: 'WAREHOUSE', label: 'Warehouse default' },
+  { value: 'WAREHOUSE_CUSTOMER', label: 'Warehouse + customer override' }
+];
+
+const HIERARCHY_SOURCE_OPTIONS: Array<{ value: WarehouseLocationHierarchySource; label: string }> = [
+  { value: 'AREA_CODE', label: 'Area code' },
+  { value: 'RACK_CODE', label: 'Rack code' },
+  { value: 'POSITION_CODE', label: 'Position code' },
+  { value: 'LEVEL_CODE', label: 'Level code' }
+];
 
 let designerEnginePromise: Promise<void> | null = null;
 
@@ -165,7 +194,7 @@ function ensureDesignerEngineLoaded(): Promise<void> {
         <i class="pi pi-refresh"></i>
         <span>Refresh Profiles</span>
       </button>
-      <button type="button" class="header-action" (click)="saveProfile()" [disabled]="isSaving || isGeneratingFromDb">
+      <button type="button" class="header-action" (click)="saveProfile()" [disabled]="isSaving || isGeneratingFromDb || isHierarchyBusy">
         <i class="pi" [class.pi-save]="!isSaving" [class.pi-spin]="isSaving" [class.pi-spinner]="isSaving"></i>
         <span>{{ isSaving ? 'Saving Layout...' : 'Save Layout' }}</span>
       </button>
@@ -174,16 +203,26 @@ function ensureDesignerEngineLoaded(): Promise<void> {
     <wms-warehouse-optimize-nav></wms-warehouse-optimize-nav>
 
     <div class="design-shell" [class.design-shell-busy]="showWorkspaceBusy">
-      <section class="panel profile-panel">
+      <section class="panel profile-panel" [class.collapsed-panel]="isPanelCollapsed('profile')">
         <div class="section-head">
           <div>
             <h3>Profile</h3>
             <p>Shared warehouse geometry lives here, while 2D and 3D pages stay read-only.</p>
           </div>
-          <span class="chip">Warehouse shared</span>
+          <div class="section-head-actions">
+            <span class="chip">Warehouse shared</span>
+            <button
+              type="button"
+              class="icon-btn panel-collapse-btn"
+              [attr.aria-label]="isPanelCollapsed('profile') ? 'Expand profile panel' : 'Collapse profile panel'"
+              [attr.title]="isPanelCollapsed('profile') ? 'Expand profile panel' : 'Collapse profile panel'"
+              (click)="togglePanel('profile')">
+              <i class="pi" [class.pi-angle-down]="isPanelCollapsed('profile')" [class.pi-angle-up]="!isPanelCollapsed('profile')"></i>
+            </button>
+          </div>
         </div>
 
-        <div class="profile-grid">
+        <div class="profile-grid" *ngIf="!isPanelCollapsed('profile')">
           <label class="field">
             <span>Existing profile</span>
             <select [ngModel]="selectedProfileId" (ngModelChange)="selectProfile($event)">
@@ -224,6 +263,108 @@ function ensureDesignerEngineLoaded(): Promise<void> {
         </div>
       </section>
 
+      <section class="panel profile-panel" [class.collapsed-panel]="isPanelCollapsed('hierarchy')">
+        <div class="section-head">
+          <div>
+            <h3>Location Hierarchy</h3>
+            <p>Map Oracle location fields into a logical warehouse structure for DB generation and live stock matching.</p>
+          </div>
+          <div class="section-head-actions">
+            <span class="chip" [class.chip-override]="hierarchyResponse?.effective?.scope === 'WAREHOUSE_CUSTOMER'">
+              {{ hierarchyEffectiveSummary }}
+            </span>
+            <button
+              type="button"
+              class="icon-btn panel-collapse-btn"
+              [attr.aria-label]="isPanelCollapsed('hierarchy') ? 'Expand location hierarchy panel' : 'Collapse location hierarchy panel'"
+              [attr.title]="isPanelCollapsed('hierarchy') ? 'Expand location hierarchy panel' : 'Collapse location hierarchy panel'"
+              (click)="togglePanel('hierarchy')">
+              <i class="pi" [class.pi-angle-down]="isPanelCollapsed('hierarchy')" [class.pi-angle-up]="!isPanelCollapsed('hierarchy')"></i>
+            </button>
+          </div>
+        </div>
+
+        <div class="profile-grid" *ngIf="!isPanelCollapsed('hierarchy')">
+          <label class="field">
+            <span>Scope</span>
+            <select [ngModel]="hierarchyScope" (ngModelChange)="changeHierarchyScope($event)" [disabled]="isHierarchyBusy">
+              <option *ngFor="let option of hierarchyScopeOptions" [ngValue]="option.value">{{ option.label }}</option>
+            </select>
+          </label>
+
+          <div class="field">
+            <span>Customer target</span>
+            <div class="inline-summary">
+              {{ hierarchyScope === 'WAREHOUSE_CUSTOMER' ? (state.activeCustomerCode() || 'No customer selected') : 'All customers in this warehouse' }}
+            </div>
+          </div>
+
+          <div class="field field-span-2 hierarchy-summary-card">
+            <span>Effective setting</span>
+            <strong>{{ hierarchyEffectiveDetail }}</strong>
+            <small>{{ hierarchySelectedRecordSummary }}</small>
+          </div>
+
+          <label class="field">
+            <span>Zone</span>
+            <select [(ngModel)]="hierarchyForm.zone" [disabled]="isHierarchyBusy">
+              <option [ngValue]="''">Not used</option>
+              <option *ngFor="let option of hierarchySourceOptions" [ngValue]="option.value">{{ option.label }}</option>
+            </select>
+          </label>
+
+          <label class="field">
+            <span>Aisle</span>
+            <select [(ngModel)]="hierarchyForm.aisle" [disabled]="isHierarchyBusy">
+              <option [ngValue]="''">Not used</option>
+              <option *ngFor="let option of hierarchySourceOptions" [ngValue]="option.value">{{ option.label }}</option>
+            </select>
+          </label>
+
+          <label class="field">
+            <span>Rack / Bay</span>
+            <select [(ngModel)]="hierarchyForm.bay" [disabled]="isHierarchyBusy">
+              <option *ngFor="let option of hierarchySourceOptions" [ngValue]="option.value">{{ option.label }}</option>
+            </select>
+          </label>
+
+          <label class="field">
+            <span>Position / Slot</span>
+            <select [(ngModel)]="hierarchyForm.slot" [disabled]="isHierarchyBusy">
+              <option [ngValue]="''">Not used</option>
+              <option *ngFor="let option of hierarchySourceOptions" [ngValue]="option.value">{{ option.label }}</option>
+            </select>
+          </label>
+
+          <label class="field">
+            <span>Level</span>
+            <select [(ngModel)]="hierarchyForm.level" [disabled]="isHierarchyBusy">
+              <option *ngFor="let option of hierarchySourceOptions" [ngValue]="option.value">{{ option.label }}</option>
+            </select>
+          </label>
+
+          <div class="field field-span-2 hierarchy-status-row">
+            <span>Status</span>
+            <strong>{{ hierarchyStatusText || 'Ready' }}</strong>
+          </div>
+
+          <div class="field field-actions">
+            <button type="button" class="soft-btn" (click)="reloadLocationHierarchy()" [disabled]="isHierarchyBusy || isGeneratingFromDb || isSaving">
+              <i class="pi" [class.pi-refresh]="!isLoadingHierarchy" [class.pi-spin]="isLoadingHierarchy" [class.pi-spinner]="isLoadingHierarchy"></i>
+              <span>{{ isLoadingHierarchy ? 'Loading hierarchy...' : 'Reload hierarchy' }}</span>
+            </button>
+            <button type="button" class="soft-btn danger" (click)="deleteLocationHierarchy()" [disabled]="isHierarchyBusy || !selectedHierarchySetting">
+              <i class="pi" [class.pi-trash]="!isDeletingHierarchy" [class.pi-spin]="isDeletingHierarchy" [class.pi-spinner]="isDeletingHierarchy"></i>
+              <span>{{ isDeletingHierarchy ? 'Deleting...' : hierarchyDeleteLabel }}</span>
+            </button>
+            <button type="button" class="soft-btn primary" (click)="saveLocationHierarchy()" [disabled]="isHierarchyBusy || isGeneratingFromDb || isSaving">
+              <i class="pi" [class.pi-save]="!isSavingHierarchy" [class.pi-spin]="isSavingHierarchy" [class.pi-spinner]="isSavingHierarchy"></i>
+              <span>{{ isSavingHierarchy ? 'Saving hierarchy...' : 'Save hierarchy' }}</span>
+            </button>
+          </div>
+        </div>
+      </section>
+
       <section class="workspace-grid" [class.side-collapsed]="sidebarPanelsCollapsed">
       <section class="panel collapsed-rail collapsed-sidebar-rail" *ngIf="sidebarPanelsCollapsed">
         <div class="panel-head collapsed-rail-head">
@@ -240,21 +381,32 @@ function ensureDesignerEngineLoaded(): Promise<void> {
       </section>
 
       <aside class="sidebar" *ngIf="!sidebarPanelsCollapsed">
-        <section class="panel">
+        <section class="panel" [class.collapsed-panel]="isPanelCollapsed('zones')">
           <div class="section-head compact">
             <div>
               <h3>Zones</h3>
               <p>{{ layout.aisles.length }} zone{{ layout.aisles.length === 1 ? '' : 's' }}</p>
             </div>
-            <button
-              *ngIf="selectedAisleIds.length > 1"
-              type="button"
-              class="soft-btn danger"
-              (click)="deleteSelectedAisles()">
-              Delete Selection
-            </button>
+            <div class="section-head-actions">
+              <button
+                *ngIf="selectedAisleIds.length > 1 && !isPanelCollapsed('zones')"
+                type="button"
+                class="soft-btn danger"
+                (click)="deleteSelectedAisles()">
+                Delete Selection
+              </button>
+              <button
+                type="button"
+                class="icon-btn panel-collapse-btn"
+                [attr.aria-label]="isPanelCollapsed('zones') ? 'Expand zones panel' : 'Collapse zones panel'"
+                [attr.title]="isPanelCollapsed('zones') ? 'Expand zones panel' : 'Collapse zones panel'"
+                (click)="togglePanel('zones')">
+                <i class="pi" [class.pi-angle-down]="isPanelCollapsed('zones')" [class.pi-angle-up]="!isPanelCollapsed('zones')"></i>
+              </button>
+            </div>
           </div>
 
+          <ng-container *ngIf="!isPanelCollapsed('zones')">
           <div *ngIf="selectedAisleIds.length > 1" class="selection-banner">
             {{ multiSelectionSummary }}
           </div>
@@ -267,7 +419,7 @@ function ensureDesignerEngineLoaded(): Promise<void> {
               [class.selected]="isSelected(aisle.id)"
               (click)="selectAisleFromList(aisle.id)">
               <div class="aisle-card-head">
-                <strong>{{ aisle.zone }}</strong>
+                <strong>{{ aisleLabel(aisle) }}</strong>
                 <span class="type-badge">{{ typeLabel(aisle.type) }}</span>
               </div>
               <div class="aisle-card-meta">
@@ -275,6 +427,9 @@ function ensureDesignerEngineLoaded(): Promise<void> {
               </div>
               <div class="aisle-card-meta">
                 {{ aisle.levels }} level{{ aisle.levels === 1 ? '' : 's' }} and {{ aisle.locations.length }} locations
+              </div>
+              <div class="aisle-card-meta" *ngIf="mixedLevelSummaryForAisle(aisle) as splitSummary">
+                {{ splitSummary }}
               </div>
             </button>
           </div>
@@ -284,13 +439,14 @@ function ensureDesignerEngineLoaded(): Promise<void> {
               Draw on the canvas or use Quick Generate to create your first zone.
             </div>
           </ng-template>
+          </ng-container>
         </section>
 
         <section class="panel" *ngIf="selectedAisleIds.length === 1 && selectedAisle">
           <div class="section-head compact">
             <div>
               <h3>Properties</h3>
-              <p>{{ selectedAisle.zone }}</p>
+              <p>{{ aisleLabel(selectedAisle) }}</p>
             </div>
           </div>
 
@@ -352,6 +508,16 @@ function ensureDesignerEngineLoaded(): Promise<void> {
               <input type="number" [(ngModel)]="propertyForm.levels" min="1" max="12" step="1" />
             </label>
 
+            <label class="field" *ngIf="propertyForm.type === 'HIGH_RACK'">
+              <span>Lower shelf levels</span>
+              <input
+                type="number"
+                [(ngModel)]="propertyForm.lowerShelfLevels"
+                min="0"
+                [max]="maxLowerShelfLevelsForForm"
+                step="1" />
+            </label>
+
             <label class="field" *ngIf="propertyForm.type !== 'WORKING_STATUS'">
               <span>Tunnel from</span>
               <input type="number" [(ngModel)]="propertyForm.tunnelLevelFrom" min="1" max="12" step="1" />
@@ -396,6 +562,11 @@ function ensureDesignerEngineLoaded(): Promise<void> {
               </select>
             </label>
 
+            <div class="field field-span-2 split-summary" *ngIf="propertyForm.type === 'HIGH_RACK'">
+              <span>Storage split</span>
+              <strong>{{ mixedLevelSummary(propertyForm.levels, propertyForm.lowerShelfLevels) }}</strong>
+            </div>
+
             <div class="field field-span-2 locations-note">
               <span>Locations</span>
               <strong>{{ selectedAisle.locations.length }}</strong>
@@ -409,15 +580,25 @@ function ensureDesignerEngineLoaded(): Promise<void> {
           </div>
         </section>
 
-        <section class="panel">
+        <section class="panel" [class.collapsed-panel]="isPanelCollapsed('statistics')">
           <div class="section-head compact">
             <div>
               <h3>Statistics</h3>
               <p>Live values from the current design.</p>
             </div>
+            <div class="section-head-actions">
+              <button
+                type="button"
+                class="icon-btn panel-collapse-btn"
+                [attr.aria-label]="isPanelCollapsed('statistics') ? 'Expand statistics panel' : 'Collapse statistics panel'"
+                [attr.title]="isPanelCollapsed('statistics') ? 'Expand statistics panel' : 'Collapse statistics panel'"
+                (click)="togglePanel('statistics')">
+                <i class="pi" [class.pi-angle-down]="isPanelCollapsed('statistics')" [class.pi-angle-up]="!isPanelCollapsed('statistics')"></i>
+              </button>
+            </div>
           </div>
 
-          <div class="stats-grid">
+          <div class="stats-grid" *ngIf="!isPanelCollapsed('statistics')">
             <div class="stat-card">
               <span>Warehouse</span>
               <strong>{{ warehouseWidth }} x {{ warehouseHeight }} m</strong>
@@ -453,15 +634,25 @@ function ensureDesignerEngineLoaded(): Promise<void> {
           </div>
         </section>
 
-        <section class="panel">
+        <section class="panel" [class.collapsed-panel]="isPanelCollapsed('quickGenerate')">
           <div class="section-head compact">
             <div>
               <h3>Quick Generate</h3>
               <p>Use this for a starting grid, then fine-tune with drawing tools.</p>
             </div>
+            <div class="section-head-actions">
+              <button
+                type="button"
+                class="icon-btn panel-collapse-btn"
+                [attr.aria-label]="isPanelCollapsed('quickGenerate') ? 'Expand quick generate panel' : 'Collapse quick generate panel'"
+                [attr.title]="isPanelCollapsed('quickGenerate') ? 'Expand quick generate panel' : 'Collapse quick generate panel'"
+                (click)="togglePanel('quickGenerate')">
+                <i class="pi" [class.pi-angle-down]="isPanelCollapsed('quickGenerate')" [class.pi-angle-up]="!isPanelCollapsed('quickGenerate')"></i>
+              </button>
+            </div>
           </div>
 
-          <div class="property-grid">
+          <div class="property-grid" *ngIf="!isPanelCollapsed('quickGenerate')">
             <label class="field">
               <span>Zones</span>
               <input type="number" [(ngModel)]="generator.aisleCount" min="1" max="24" step="1" />
@@ -480,6 +671,31 @@ function ensureDesignerEngineLoaded(): Promise<void> {
             <label class="field">
               <span>Zone prefix</span>
               <input type="text" [(ngModel)]="generator.zonePrefix" />
+            </label>
+
+            <label class="field">
+              <span>Zone start</span>
+              <input type="number" [(ngModel)]="generator.zoneStartNumber" min="1" max="999" step="1" />
+            </label>
+
+            <label class="field">
+              <span>Zone naming</span>
+              <select [(ngModel)]="generator.zoneNamingPattern">
+                <option value="prefix-row">{{ '{Prefix}-{Row}' }}</option>
+                <option value="prefixrow">{{ '{Prefix}{Row}' }}</option>
+                <option value="prefix-row-suffix">{{ '{Prefix}-{Row}-{Suffix}' }}</option>
+                <option value="custom">Custom</option>
+              </select>
+            </label>
+
+            <label class="field">
+              <span>Zone suffix</span>
+              <input type="text" [(ngModel)]="generator.zoneSuffix" />
+            </label>
+
+            <label class="field field-span-2" *ngIf="generator.zoneNamingPattern === 'custom'">
+              <span>Custom zone pattern</span>
+              <input type="text" [(ngModel)]="generator.customZonePattern" placeholder="{{ '{prefix}-{row}' }}" />
             </label>
 
             <label class="field">
@@ -505,6 +721,78 @@ function ensureDesignerEngineLoaded(): Promise<void> {
             </label>
 
             <label class="field">
+              <span>Row format</span>
+              <select [(ngModel)]="generator.rowFormat">
+                <option value="numeric">Numeric</option>
+                <option value="alpha">Alpha</option>
+                <option value="alpha2">Alpha2</option>
+              </select>
+            </label>
+
+            <label class="field">
+              <span>Location naming</span>
+              <select [(ngModel)]="generator.locationNamingPattern">
+                <option value="zone-row-bay-level">{{ '{Zone}-{Row}-{Bay}-L{Level}' }}</option>
+                <option value="zone-bay-level">{{ '{Zone}-{Bay}-L{Level}' }}</option>
+                <option value="zone-row-bay-side-level">{{ '{Zone}-{Row}-{Bay}{Side}-L{Level}' }}</option>
+                <option value="custom">Custom</option>
+              </select>
+            </label>
+
+            <label class="field field-span-2" *ngIf="generator.locationNamingPattern === 'custom'">
+              <span>Custom location pattern</span>
+              <input type="text" [(ngModel)]="generator.customLocationPattern" placeholder="{{ '{zone}-{row}-{bay}{side}-{level}' }}" />
+            </label>
+
+            <label class="field">
+              <span>Row padding</span>
+              <input type="number" [(ngModel)]="generator.rowPadding" min="1" max="4" step="1" />
+            </label>
+
+            <label class="field">
+              <span>Bay padding</span>
+              <input type="number" [(ngModel)]="generator.bayPadding" min="1" max="4" step="1" />
+            </label>
+
+            <label class="field">
+              <span>Level prefix</span>
+              <input type="text" [(ngModel)]="generator.levelPrefix" maxlength="4" />
+            </label>
+
+            <label class="field">
+              <span>Left bays</span>
+              <select [(ngModel)]="generator.leftBayNumbering">
+                <option value="running">Running</option>
+                <option value="odd">Odd</option>
+                <option value="even">Even</option>
+              </select>
+            </label>
+
+            <label class="field">
+              <span>Right bays</span>
+              <select [(ngModel)]="generator.rightBayNumbering">
+                <option value="running">Running</option>
+                <option value="odd">Odd</option>
+                <option value="even">Even</option>
+              </select>
+            </label>
+
+            <label class="field">
+              <span>Row start</span>
+              <input type="number" [(ngModel)]="generator.rowNumberStart" min="1" max="999" step="1" />
+            </label>
+
+            <label class="field">
+              <span>Bay start</span>
+              <input type="number" [(ngModel)]="generator.bayNumberStart" min="1" max="999" step="1" />
+            </label>
+
+            <label class="field">
+              <span>Level start</span>
+              <input type="number" [(ngModel)]="generator.levelNumberStart" min="1" max="99" step="1" />
+            </label>
+
+            <label class="field">
               <span>Start X</span>
               <input type="number" [(ngModel)]="generator.startX" min="0" max="120" step="0.5" />
             </label>
@@ -515,13 +803,19 @@ function ensureDesignerEngineLoaded(): Promise<void> {
             </label>
           </div>
 
-          <div class="property-actions">
-            <button type="button" class="soft-btn primary" (click)="generateLayout()" [disabled]="isGeneratingFromDb || isSaving">Generate Grid</button>
-            <button type="button" class="soft-btn" (click)="generateLayoutFromDb()" [disabled]="isGeneratingFromDb || isSaving">
+          <div class="generate-preview" *ngIf="!isPanelCollapsed('quickGenerate')">
+            <div class="generate-preview-row"><span>Zone preview</span><strong>{{ generatorZonePreview }}</strong></div>
+            <div class="generate-preview-row"><span>Location preview</span><strong>{{ generatorLocationPreview }}</strong></div>
+            <div class="generate-preview-row" *ngIf="generateStatusText"><span>Status</span><strong [class.generate-status-saving]="generateState === 'generating'" [class.generate-status-error]="generateState === 'error'">{{ generateStatusText }}</strong></div>
+          </div>
+
+          <div class="property-actions" *ngIf="!isPanelCollapsed('quickGenerate')">
+            <button type="button" class="soft-btn primary" (click)="generateLayout()" [disabled]="isGeneratingLayout || isGeneratingFromDb || isSaving || isHierarchyBusy">{{ isGeneratingLayout ? 'Generating Layout...' : 'Generate Layout' }}</button>
+            <button type="button" class="soft-btn" (click)="generateLayoutFromDb()" [disabled]="isGeneratingFromDb || isSaving || isHierarchyBusy || isGeneratingLayout">
               <i class="pi" [class.pi-database]="!isGeneratingFromDb" [class.pi-spin]="isGeneratingFromDb" [class.pi-spinner]="isGeneratingFromDb"></i>
               <span>{{ isGeneratingFromDb ? 'Generating from DB...' : 'Generate from DB' }}</span>
             </button>
-            <button type="button" class="soft-btn danger" (click)="clearDesign()" [disabled]="isGeneratingFromDb || isSaving">Clear Design</button>
+            <button type="button" class="soft-btn danger" (click)="clearDesign()" [disabled]="isGeneratingFromDb || isSaving || isHierarchyBusy || isGeneratingLayout">Clear Design</button>
           </div>
         </section>
 
@@ -656,14 +950,13 @@ function ensureDesignerEngineLoaded(): Promise<void> {
             </div>
           </div>
 
-          <div class="canvas-status">
-            <span>{{ modeHint }}</span>
-            <span>{{ coordinatesText }}</span>
-            <span *ngIf="layout.boundaryPolygon?.length">Boundary ready</span>
-          </div>
+        <div class="canvas-status">
+          <span>{{ modeHint }}</span>
+          <span>{{ coordinatesText }}</span>
+          <span *ngIf="layout.boundaryPolygon?.length">Boundary ready</span>
         </div>
-      </section>
-
+      </div>
+    </section>
       </section>
 
       <div class="workspace-loading-overlay" *ngIf="showWorkspaceBusy" aria-live="polite">
@@ -823,6 +1116,20 @@ function ensureDesignerEngineLoaded(): Promise<void> {
       margin-bottom: 12px;
     }
 
+    .collapsed-panel .section-head,
+    .collapsed-panel .section-head.compact {
+      margin-bottom: 0;
+    }
+
+    .section-head-actions {
+      display: inline-flex;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 8px;
+      flex-wrap: wrap;
+      min-width: 0;
+    }
+
     .section-head h3 {
       margin: 0;
       font-size: 15px;
@@ -845,6 +1152,11 @@ function ensureDesignerEngineLoaded(): Promise<void> {
       color: #1d4ed8;
       font-size: 12px;
       font-weight: 600;
+    }
+
+    .chip-override {
+      background: #eef2ff;
+      color: #4338ca;
     }
 
     .profile-grid,
@@ -885,6 +1197,50 @@ function ensureDesignerEngineLoaded(): Promise<void> {
     .field textarea,
     .json-editor {
       resize: vertical;
+    }
+
+    .inline-summary,
+    .hierarchy-summary-card,
+    .hierarchy-status-row {
+      width: 100%;
+      min-height: 44px;
+      border: 1px solid #dbe2ea;
+      border-radius: 8px;
+      background: #f8fafc;
+      color: #0f172a;
+      padding: 10px 12px;
+      font-size: 13px;
+      line-height: 1.5;
+    }
+
+    .inline-summary {
+      display: flex;
+      align-items: center;
+    }
+
+    .hierarchy-summary-card {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .hierarchy-summary-card strong,
+    .hierarchy-status-row strong {
+      font-size: 13px;
+      color: #0f172a;
+    }
+
+    .hierarchy-summary-card small {
+      font-size: 11px;
+      color: #64748b;
+      line-height: 1.5;
+    }
+
+    .hierarchy-status-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
     }
 
     .field-span-2 {
@@ -1040,6 +1396,21 @@ function ensureDesignerEngineLoaded(): Promise<void> {
       min-height: 52px;
     }
 
+    .split-summary {
+      justify-content: space-between;
+      padding: 10px 12px;
+      border: 1px solid #dbe2ea;
+      border-radius: 8px;
+      background: #f8fafc;
+      gap: 8px;
+    }
+
+    .split-summary strong {
+      font-size: 13px;
+      color: #0f172a;
+      text-align: right;
+    }
+
     .status-preview-swatch {
       width: 16px;
       height: 16px;
@@ -1191,6 +1562,10 @@ function ensureDesignerEngineLoaded(): Promise<void> {
     .icon-btn {
       min-width: 38px;
       padding: 0;
+    }
+
+    .panel-collapse-btn {
+      flex: 0 0 auto;
     }
 
     .toggle-btn.active,
@@ -1473,6 +1848,15 @@ export class WarehouseOptimizeDesignComponent implements AfterViewInit {
   readonly directionOptions = DIRECTION_OPTIONS;
   readonly modeOptions = MODE_OPTIONS;
   readonly workingStatusFlowOptions = WORKING_STATUS_FLOW_OPTIONS;
+  readonly hierarchyScopeOptions = HIERARCHY_SCOPE_OPTIONS;
+  readonly hierarchySourceOptions = HIERARCHY_SOURCE_OPTIONS;
+  readonly panelCollapsed: Record<CollapsiblePanelKey, boolean> = {
+    profile: true,
+    hierarchy: true,
+    zones: true,
+    statistics: true,
+    quickGenerate: true
+  };
 
   selectedProfileId: number | null = null;
   profileName = 'Main Shared Layout';
@@ -1491,8 +1875,18 @@ export class WarehouseOptimizeDesignComponent implements AfterViewInit {
   coordinatesText = 'X: -, Y: -';
   isSaving = false;
   isGeneratingFromDb = false;
+  generateState: GenerateState = 'idle';
+  generateStatusText = '';
   saveState: SaveState = 'idle';
   saveStatusText = '';
+  hierarchyScope: WarehouseLocationHierarchyScope = 'WAREHOUSE';
+  hierarchyForm: HierarchyFormModel = this.createDefaultHierarchyForm();
+  hierarchyResponse: WarehouseLocationHierarchyResponse | null = null;
+  isLoadingHierarchy = false;
+  isSavingHierarchy = false;
+  isDeletingHierarchy = false;
+  hierarchyStatusText = '';
+  hierarchyStatusState: SaveState = 'idle';
 
   layout: WarehouseDesignerLayout = createEmptyLayout(this.warehouseWidth, this.warehouseHeight);
   layoutText = prettyLayoutJson(this.layout);
@@ -1524,6 +1918,10 @@ export class WarehouseOptimizeDesignComponent implements AfterViewInit {
     return this.showProfileLoading || this.isGeneratingFromDb;
   }
 
+
+  get isGeneratingLayout(): boolean {
+    return this.generateState === 'generating';
+  }
   get workspaceBusyTitle(): string {
     return this.isGeneratingFromDb ? 'Generating layout from DB' : 'Loading saved layout';
   }
@@ -1542,6 +1940,53 @@ export class WarehouseOptimizeDesignComponent implements AfterViewInit {
     }
     const usedArea = this.layout.aisles.reduce((sum, aisle) => sum + (aisle.width * aisle.height), 0);
     return Math.round((usedArea / totalArea) * 100);
+  }
+
+  get maxLowerShelfLevelsForForm(): number {
+    return Math.max(0, Math.round(this.propertyForm.levels) - 1);
+  }
+
+  get isHierarchyBusy(): boolean {
+    return this.isLoadingHierarchy || this.isSavingHierarchy || this.isDeletingHierarchy;
+  }
+
+  get selectedHierarchySetting() {
+    return this.hierarchyScope === 'WAREHOUSE'
+      ? this.hierarchyResponse?.warehouseDefault ?? null
+      : this.hierarchyResponse?.customerOverride ?? null;
+  }
+
+  get hierarchyEffectiveSummary(): string {
+    if (this.hierarchyResponse?.effective?.scope === 'WAREHOUSE_CUSTOMER') {
+      return 'Customer override active';
+    }
+    if (this.hierarchyResponse?.effective?.scope === 'WAREHOUSE') {
+      return 'Warehouse default active';
+    }
+    return 'Standard mapping';
+  }
+
+  get hierarchyEffectiveDetail(): string {
+    if (!this.hierarchyResponse?.effective) {
+      return 'No hierarchy setting is saved. Auto-generate and live sync use the standard area + rack + position + level mapping.';
+    }
+    return this.hierarchyResponse.effective.scope === 'WAREHOUSE_CUSTOMER'
+      ? `Using the customer override for ${this.hierarchyResponse.effective.customerCode}.`
+      : 'Using the warehouse default for every customer unless an override exists.';
+  }
+
+  get hierarchySelectedRecordSummary(): string {
+    if (this.selectedHierarchySetting) {
+      const mapping = this.selectedHierarchySetting.mapping;
+      return `Zone: ${this.hierarchySourceLabel(mapping.zone)}, Aisle: ${this.hierarchySourceLabel(mapping.aisle ?? '')}, Bay: ${this.hierarchySourceLabel(mapping.bay)}, Slot: ${this.hierarchySourceLabel(mapping.slot)}, Level: ${this.hierarchySourceLabel(mapping.level)}`;
+    }
+    return this.hierarchyScope === 'WAREHOUSE'
+      ? 'No warehouse default is saved yet.'
+      : `No override is saved yet for ${this.state.activeCustomerCode() || 'the current customer'}.`;
+  }
+
+  get hierarchyDeleteLabel(): string {
+    return this.hierarchyScope === 'WAREHOUSE' ? 'Delete default' : 'Delete override';
   }
 
   constructor() {
@@ -1588,6 +2033,14 @@ export class WarehouseOptimizeDesignComponent implements AfterViewInit {
         });
       }
     });
+
+    effect(() => {
+      const activeCustomerCode = this.state.activeCustomerCode();
+      if (!activeCustomerCode) {
+        return;
+      }
+      this.reloadLocationHierarchy();
+    });
   }
 
   async ngAfterViewInit(): Promise<void> {
@@ -1618,12 +2071,161 @@ export class WarehouseOptimizeDesignComponent implements AfterViewInit {
     return aisle.id;
   }
 
+  aisleLabel(aisle: Pick<WarehouseAisle, 'zone' | 'aisleCode'> | null | undefined): string {
+    return aisleDisplayLabel(aisle);
+  }
+
+  changeHierarchyScope(scope: WarehouseLocationHierarchyScope): void {
+    this.hierarchyScope = scope;
+    this.applyHierarchyFormFromResponse();
+    this.setHierarchyStatus('idle', this.selectedHierarchySetting ? 'Loaded saved hierarchy mapping' : 'No saved hierarchy mapping for this scope');
+  }
+
+  reloadLocationHierarchy(): void {
+    if (this.isLoadingHierarchy || this.isSavingHierarchy || this.isDeletingHierarchy) {
+      return;
+    }
+    this.isLoadingHierarchy = true;
+    this.setHierarchyStatus('saving', 'Loading hierarchy mapping...');
+    this.service.getLocationHierarchy(this.state.activeCustomerCode()).pipe(
+      finalize(() => {
+        this.isLoadingHierarchy = false;
+      })
+    ).subscribe({
+      next: response => {
+        this.hierarchyResponse = response;
+        this.applyHierarchyFormFromResponse();
+        this.setHierarchyStatus('success', this.selectedHierarchySetting ? 'Hierarchy mapping loaded' : 'No hierarchy mapping saved for this scope');
+      },
+      error: error => {
+        this.setHierarchyStatus('error', this.saveErrorMessage(error));
+        this.messageService.add({
+          severity: 'error',
+          summary: 'Hierarchy load failed',
+          detail: this.saveErrorMessage(error)
+        });
+      }
+    });
+  }
+
+  saveLocationHierarchy(): void {
+    if (this.isHierarchyBusy || this.isGeneratingFromDb || this.isSaving) {
+      return;
+    }
+
+    this.isSavingHierarchy = true;
+    this.setHierarchyStatus('saving', 'Saving hierarchy mapping...');
+    this.service.saveLocationHierarchy({
+      scope: this.hierarchyScope,
+      customerCode: this.hierarchyScope === 'WAREHOUSE_CUSTOMER' ? this.state.activeCustomerCode() : null,
+      mapping: this.locationHierarchyPayload()
+    }).pipe(
+      finalize(() => {
+        this.isSavingHierarchy = false;
+      })
+    ).subscribe({
+      next: response => {
+        this.hierarchyResponse = response;
+        this.applyHierarchyFormFromResponse();
+        this.setHierarchyStatus('success', this.hierarchyScope === 'WAREHOUSE' ? 'Warehouse default saved' : `Override saved for ${this.state.activeCustomerCode()}`);
+        this.messageService.add({
+          severity: 'success',
+          summary: 'Hierarchy saved',
+          detail: this.hierarchyScope === 'WAREHOUSE'
+            ? 'The warehouse default mapping is ready for DB generation and live sync.'
+            : `The customer override for ${this.state.activeCustomerCode()} is ready for DB generation and live sync.`
+        });
+      },
+      error: error => {
+        this.setHierarchyStatus('error', this.saveErrorMessage(error));
+        this.messageService.add({
+          severity: 'error',
+          summary: 'Hierarchy save failed',
+          detail: this.saveErrorMessage(error)
+        });
+      }
+    });
+  }
+
+  deleteLocationHierarchy(): void {
+    if (this.isHierarchyBusy || !this.selectedHierarchySetting) {
+      return;
+    }
+    const scopeLabel = this.hierarchyScope === 'WAREHOUSE' ? 'warehouse default' : `override for ${this.state.activeCustomerCode()}`;
+    if (!window.confirm(`Delete the ${scopeLabel} hierarchy mapping?`)) {
+      return;
+    }
+
+    this.isDeletingHierarchy = true;
+    this.setHierarchyStatus('saving', 'Deleting hierarchy mapping...');
+    this.service.deleteLocationHierarchy(
+      this.hierarchyScope,
+      this.hierarchyScope === 'WAREHOUSE_CUSTOMER' ? this.state.activeCustomerCode() : null
+    ).pipe(
+      finalize(() => {
+        this.isDeletingHierarchy = false;
+      })
+    ).subscribe({
+      next: response => {
+        this.hierarchyResponse = response;
+        this.applyHierarchyFormFromResponse();
+        this.setHierarchyStatus('success', this.hierarchyScope === 'WAREHOUSE' ? 'Warehouse default deleted' : `Override deleted for ${this.state.activeCustomerCode()}`);
+        this.messageService.add({
+          severity: 'success',
+          summary: 'Hierarchy deleted',
+          detail: this.hierarchyScope === 'WAREHOUSE'
+            ? 'The warehouse default mapping was removed. The standard mapping is active again.'
+            : `The override for ${this.state.activeCustomerCode()} was removed. Fallback rules are active again.`
+        });
+      },
+      error: error => {
+        this.setHierarchyStatus('error', this.saveErrorMessage(error));
+        this.messageService.add({
+          severity: 'error',
+          summary: 'Hierarchy delete failed',
+          detail: this.saveErrorMessage(error)
+        });
+      }
+    });
+  }
+
   isSelected(aisleId: number): boolean {
     return this.selectedAisleIds.includes(aisleId);
   }
 
   typeLabel(type: string): string {
     return STORAGE_TYPE_OPTIONS.find(option => option.value === type)?.label ?? type;
+  }
+
+  mixedLevelSummary(levels: number, lowerShelfLevels: number | null | undefined): string {
+    const resolvedLevels = clampWhole(levels, 1, 12, 1);
+    const resolvedLowerShelfLevels = clampWhole(
+      Number(lowerShelfLevels ?? 0),
+      0,
+      Math.max(resolvedLevels - 1, 0),
+      0
+    );
+
+    if (resolvedLowerShelfLevels <= 0) {
+      return resolvedLevels === 1 ? 'Rack L1' : `Rack L1-L${resolvedLevels}`;
+    }
+
+    const rackStartLevel = resolvedLowerShelfLevels + 1;
+    const shelfSummary = resolvedLowerShelfLevels === 1
+      ? 'Shelf L1'
+      : `Shelf L1-L${resolvedLowerShelfLevels}`;
+    const rackSummary = rackStartLevel === resolvedLevels
+      ? `Rack L${rackStartLevel}`
+      : `Rack L${rackStartLevel}-L${resolvedLevels}`;
+
+    return `${shelfSummary}, ${rackSummary}`;
+  }
+
+  mixedLevelSummaryForAisle(aisle: WarehouseAisle): string | null {
+    if (aisle.type !== 'HIGH_RACK') {
+      return null;
+    }
+    return this.mixedLevelSummary(aisle.levels, aisle.lowerShelfLevels);
   }
 
   formatDimension(value: number): string {
@@ -1649,6 +2251,14 @@ export class WarehouseOptimizeDesignComponent implements AfterViewInit {
 
   toggleSidebarPanels(): void {
     this.sidebarPanelsCollapsed = !this.sidebarPanelsCollapsed;
+  }
+
+  isPanelCollapsed(panel: CollapsiblePanelKey): boolean {
+    return this.panelCollapsed[panel];
+  }
+
+  togglePanel(panel: CollapsiblePanelKey): void {
+    this.panelCollapsed[panel] = !this.panelCollapsed[panel];
   }
 
   updateDraftMetadata(): void {
@@ -1719,6 +2329,14 @@ export class WarehouseOptimizeDesignComponent implements AfterViewInit {
     });
   }
 
+  get generatorZonePreview(): string {
+    return this.buildGeneratorZonePreview();
+  }
+
+  get generatorLocationPreview(): string {
+    return this.buildGeneratorLocationPreview();
+  }
+
   generateLayout(): void {
     const config: LayoutGeneratorConfig = {
       ...this.generator,
@@ -1731,17 +2349,31 @@ export class WarehouseOptimizeDesignComponent implements AfterViewInit {
       return;
     }
 
+    this.generateState = 'generating';
+    this.generateStatusText = 'Generating layout preview...';
     this.generator = config;
-    this.loadLayoutData(createGeneratedLayout(config), true);
-    this.messageService.add({
-      severity: 'success',
-      summary: 'Starter layout generated',
-      detail: 'You can keep drawing and adjusting zones directly on the canvas.'
-    });
+    try {
+      this.loadLayoutData(createGeneratedLayout(config), true);
+      this.generateState = 'success';
+      this.generateStatusText = 'Generate completed.';
+      this.messageService.add({
+        severity: 'success',
+        summary: 'Starter layout generated',
+        detail: 'You can keep drawing and adjusting zones directly on the canvas.'
+      });
+    } catch (error) {
+      this.generateState = 'error';
+      this.generateStatusText = 'Generate failed.';
+      this.messageService.add({
+        severity: 'error',
+        summary: 'Generate failed',
+        detail: error instanceof Error ? error.message : 'Could not generate the layout.'
+      });
+    }
   }
 
   generateLayoutFromDb(): void {
-    if (this.isGeneratingFromDb || this.isSaving) {
+    if (this.isGeneratingFromDb || this.isSaving || this.isHierarchyBusy) {
       return;
     }
 
@@ -1753,7 +2385,7 @@ export class WarehouseOptimizeDesignComponent implements AfterViewInit {
     this.isGeneratingFromDb = true;
     this.setSaveStatus('saving', 'Generating layout from DB...');
 
-    this.service.generateLayoutFromDb().pipe(
+    this.service.generateLayoutFromDb(this.state.activeCustomerCode()).pipe(
       finalize(() => {
         this.isGeneratingFromDb = false;
       })
@@ -1772,6 +2404,22 @@ export class WarehouseOptimizeDesignComponent implements AfterViewInit {
             severity: 'warn',
             summary: 'Generation warnings',
             detail: response.warnings[0]
+          });
+        }
+
+        if ((response.summary.normalizedDimensionRows ?? 0) > 0 || (response.summary.normalizedHeightRows ?? 0) > 0) {
+          this.messageService.add({
+            severity: 'info',
+            summary: 'Dimensions normalized',
+            detail: this.generatedLayoutNormalizationText(response.summary)
+          });
+        }
+
+        if ((response.summary.mixedAreasUncertain ?? 0) > 0) {
+          this.messageService.add({
+            severity: 'warn',
+            summary: 'Mixed levels need review',
+            detail: `${response.summary.mixedAreasUncertain} generated area${response.summary.mixedAreasUncertain === 1 ? '' : 's'} may contain mixed shelf-to-rack levels. Review Lower shelf levels after generation.`
           });
         }
       },
@@ -1933,6 +2581,9 @@ export class WarehouseOptimizeDesignComponent implements AfterViewInit {
     const levels = clampWhole(this.propertyForm.levels, 1, 12, this.drawer.selectedAisle.levels);
     const tunnelFrom = clampWhole(this.propertyForm.tunnelLevelFrom, 1, 12, 1);
     const tunnelTo = clampWhole(this.propertyForm.tunnelLevelTo, tunnelFrom, 12, levels);
+    const lowerShelfLevels = this.propertyForm.type === 'HIGH_RACK'
+      ? clampWhole(this.propertyForm.lowerShelfLevels, 0, Math.max(levels - 1, 0), 0)
+      : 0;
     const pickFaceLevels = (this.propertyForm.pickFaceLevels.length > 0 ? this.propertyForm.pickFaceLevels : [1])
       .map(value => clampWhole(value, 1, levels, 1))
       .sort((left, right) => left - right);
@@ -1961,6 +2612,7 @@ export class WarehouseOptimizeDesignComponent implements AfterViewInit {
       levels,
       tunnelLevelFrom: tunnelFrom,
       tunnelLevelTo: tunnelTo,
+      lowerShelfLevels,
       bayWidth: clampFloat(this.propertyForm.bayWidth, 0.5, 5, this.drawer.selectedAisle.bayWidth),
       bayDepth: clampFloat(this.propertyForm.bayDepth, 0.5, 3, this.drawer.selectedAisle.bayDepth),
       aisleWidth: clampFloat(this.propertyForm.aisleWidth, 0, 6, this.drawer.selectedAisle.aisleWidth),
@@ -1978,7 +2630,10 @@ export class WarehouseOptimizeDesignComponent implements AfterViewInit {
     this.messageService.add({
       severity: 'success',
       summary: 'Properties updated',
-      detail: `${this.drawer.selectedAisle.zone} was updated.`
+      detail: `${this.aisleLabel(this.drawer.selectedAisle ? {
+        zone: this.drawer.selectedAisle.zone,
+        aisleCode: this.drawer.selectedAisle.aisleCode ?? null
+      } : null)} was updated.`
     });
   }
 
@@ -1992,7 +2647,10 @@ export class WarehouseOptimizeDesignComponent implements AfterViewInit {
     this.messageService.add({
       severity: 'success',
       summary: 'Zone duplicated',
-      detail: `${aisle.zone} is ready for editing.`
+      detail: `${this.aisleLabel({
+        zone: aisle.zone,
+        aisleCode: aisle.aisleCode ?? null
+      })} is ready for editing.`
     });
   }
 
@@ -2360,6 +3018,7 @@ export class WarehouseOptimizeDesignComponent implements AfterViewInit {
       levels: aisle.levels,
       tunnelLevelFrom: aisle.tunnelLevelFrom ?? 1,
       tunnelLevelTo: aisle.tunnelLevelTo ?? aisle.levels,
+      lowerShelfLevels: clampWhole(aisle.lowerShelfLevels ?? 0, 0, Math.max(aisle.levels - 1, 0), 0),
       bayWidth: aisle.bayWidth,
       bayDepth: aisle.bayDepth,
       aisleWidth: aisle.aisleWidth,
@@ -2523,6 +3182,7 @@ export class WarehouseOptimizeDesignComponent implements AfterViewInit {
       levels: 4,
       tunnelLevelFrom: 1,
       tunnelLevelTo: 4,
+      lowerShelfLevels: 0,
       bayWidth: 1.2,
       bayDepth: 1,
       aisleWidth: 2.5,
@@ -2530,6 +3190,79 @@ export class WarehouseOptimizeDesignComponent implements AfterViewInit {
       startPointX: 0,
       startPointY: 0
     };
+  }
+
+  private createDefaultHierarchyForm(): HierarchyFormModel {
+    return {
+      zone: 'AREA_CODE',
+      aisle: 'RACK_CODE',
+      bay: 'POSITION_CODE',
+      slot: '',
+      level: 'LEVEL_CODE'
+    };
+  }
+
+  private applyHierarchyFormFromResponse(): void {
+    const mapping = this.selectedHierarchySetting?.mapping;
+    if (!mapping) {
+      this.hierarchyForm = this.createDefaultHierarchyForm();
+      return;
+    }
+    this.hierarchyForm = {
+      zone: mapping.zone ?? '',
+      aisle: mapping.aisle ?? '',
+      bay: mapping.bay,
+      slot: mapping.slot ?? '',
+      level: mapping.level
+    };
+  }
+
+  private locationHierarchyPayload(): WarehouseLocationHierarchyMapping {
+    return {
+      zone: this.hierarchyForm.zone || null,
+      aisle: this.hierarchyForm.aisle || null,
+      bay: this.hierarchyForm.bay,
+      slot: this.hierarchyForm.slot || null,
+      level: this.hierarchyForm.level
+    };
+  }
+
+  private setHierarchyStatus(state: SaveState, text: string): void {
+    this.hierarchyStatusState = state;
+    this.hierarchyStatusText = text;
+  }
+
+  private hierarchySourceLabel(value: WarehouseLocationHierarchySource | '' | null | undefined): string {
+    const option = this.hierarchySourceOptions.find(item => item.value === value);
+    return option?.label ?? 'Not used';
+  }
+
+  private buildGeneratorZonePreview(): string {
+    const config: LayoutGeneratorConfig = {
+      ...this.generator,
+      warehouseWidth: clampWhole(this.warehouseWidth, 10, 500, 130),
+      warehouseHeight: clampWhole(this.warehouseHeight, 10, 500, 70),
+      aisleCount: Math.max(1, this.generator.aisleCount)
+    };
+    const layout = createGeneratedLayout(config);
+    const first = layout.aisles[0]?.zone ?? '-';
+    const last = layout.aisles[layout.aisles.length - 1]?.zone ?? first;
+    return `${first} → ${last}`;
+  }
+
+  private buildGeneratorLocationPreview(): string {
+    const config: LayoutGeneratorConfig = {
+      ...this.generator,
+      warehouseWidth: clampWhole(this.warehouseWidth, 10, 500, 130),
+      warehouseHeight: clampWhole(this.warehouseHeight, 10, 500, 70),
+      aisleCount: Math.max(1, this.generator.aisleCount),
+      baysPerAisle: Math.max(1, this.generator.baysPerAisle)
+    };
+    const layout = createGeneratedLayout(config);
+    const first = layout.aisles[0]?.locations[0]?.location ?? '-';
+    const lastAisle = layout.aisles[layout.aisles.length - 1];
+    const last = lastAisle?.locations[lastAisle.locations.length - 1]?.location ?? first;
+    return `${first} → ${last}`;
   }
 
   private defaultGenerator(): LayoutGeneratorConfig {
@@ -2540,6 +3273,21 @@ export class WarehouseOptimizeDesignComponent implements AfterViewInit {
       baysPerAisle: 18,
       levels: 4,
       zonePrefix: 'Zone',
+      zoneStartNumber: 1,
+      zoneNamingPattern: 'prefix-row',
+      zoneSuffix: '',
+      customZonePattern: '{prefix}-{row}',
+      locationNamingPattern: 'zone-row-bay-side-level',
+      customLocationPattern: '{zone}-{row}-{bay}{side}-{level}',
+      rowFormat: 'numeric',
+      rowPadding: 2,
+      bayPadding: 3,
+      levelPrefix: 'L',
+      leftBayNumbering: 'odd',
+      rightBayNumbering: 'even',
+      rowNumberStart: 1,
+      bayNumberStart: 1,
+      levelNumberStart: 1,
       rackType: 'HIGH_RACK',
       bayWidth: 1.2,
       bayDepth: 1,
@@ -2578,6 +3326,7 @@ export class WarehouseOptimizeDesignComponent implements AfterViewInit {
         ...aisle,
         locations: aisle.locations.map(location => ({ ...location })),
         baseLocations: aisle.baseLocations?.map(location => ({ ...location })) ?? null,
+        lowerShelfLevels: aisle.lowerShelfLevels ?? 0,
         pickFaceLevels: aisle.pickFaceLevels ? [...aisle.pickFaceLevels] : null
       };
 
@@ -2673,14 +3422,37 @@ export class WarehouseOptimizeDesignComponent implements AfterViewInit {
       inferredPositions: number;
       inferredLevels: number;
       skippedRows: number;
+      warehouseWidth?: number | null;
+      warehouseHeight?: number | null;
+      mixedAreasDetected?: number;
     };
   }): string {
     const { summary } = response;
     let detail = `${summary.areas} areas, ${summary.racks} racks, and ${summary.locations} locations loaded into the draft.`;
+    if (summary.warehouseWidth && summary.warehouseHeight) {
+      detail += ` Final footprint: ${this.formatDimension(summary.warehouseWidth)}m x ${this.formatDimension(summary.warehouseHeight)}m.`;
+    }
+    if ((summary.mixedAreasDetected ?? 0) > 0) {
+      detail += ` ${summary.mixedAreasDetected} mixed area${summary.mixedAreasDetected === 1 ? '' : 's'} detected.`;
+    }
     if (summary.inferredPositions > 0 || summary.inferredLevels > 0 || summary.skippedRows > 0) {
       detail += ` ${summary.inferredPositions} positions inferred, ${summary.inferredLevels} levels inferred, ${summary.skippedRows} rows skipped.`;
     }
     return detail;
+  }
+
+  private generatedLayoutNormalizationText(summary: {
+    normalizedDimensionRows?: number;
+    normalizedHeightRows?: number;
+  }): string {
+    const messages: string[] = [];
+    if ((summary.normalizedDimensionRows ?? 0) > 0) {
+      messages.push(`${summary.normalizedDimensionRows} row${summary.normalizedDimensionRows === 1 ? '' : 's'} used normalized LOC_LEN or LOC_WID values.`);
+    }
+    if ((summary.normalizedHeightRows ?? 0) > 0) {
+      messages.push(`${summary.normalizedHeightRows} row${summary.normalizedHeightRows === 1 ? '' : 's'} used normalized LOC_HIG values for mixed-level detection.`);
+    }
+    return messages.join(' ');
   }
 
   private savedMessage(updatedAt: string | null | undefined): string {
@@ -2756,3 +3528,5 @@ function colorForAisleType(type: string): string {
       return 'rgba(148, 163, 184, 0.55)';
   }
 }
+
+

@@ -12,6 +12,7 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -33,6 +34,32 @@ public class WarehouseOptimizeService {
     private static final BigDecimal DEFAULT_AISLE_WIDTH = new BigDecimal("1.2");
     private static final BigDecimal OUTER_PADDING = new BigDecimal("8.0");
     private static final BigDecimal AREA_GAP = new BigDecimal("6.0");
+    private static final BigDecimal INTERNAL_RACK_ROW_GAP = new BigDecimal("3.0");
+    private static final BigDecimal MIN_BAY_DEPTH = new BigDecimal("0.6");
+    private static final BigDecimal MAX_BAY_DEPTH = new BigDecimal("3.5");
+    private static final BigDecimal MIN_BAY_WIDTH = new BigDecimal("0.6");
+    private static final BigDecimal MAX_BAY_WIDTH = new BigDecimal("2.5");
+    private static final BigDecimal MIN_LEVEL_HEIGHT = new BigDecimal("0.15");
+    private static final BigDecimal MAX_LEVEL_HEIGHT = new BigDecimal("4.0");
+    private static final BigDecimal MIN_MIXED_HEIGHT_GAP = new BigDecimal("0.20");
+    private static final BigDecimal MAX_MIXED_LOWER_RATIO = new BigDecimal("0.75");
+    private static final BigDecimal MIXED_HEIGHT_HINT_GAP = new BigDecimal("0.10");
+    private static final BigDecimal MIXED_HEIGHT_HINT_RATIO = new BigDecimal("0.85");
+    private static final BigDecimal MIN_POSITION_BOUNDARY_GAP = BigDecimal.ONE;
+    private static final BigDecimal MIN_POSITION_BOUNDARY_RATIO = new BigDecimal("1.50");
+    private static final BigDecimal MIN_POSITION_AVERAGE_GAP = new BigDecimal("0.50");
+    private static final BigDecimal POSITION_HINT_RATIO = new BigDecimal("1.10");
+    private static final BigDecimal SUBSLOT_FILL_RATIO = new BigDecimal("0.82");
+    private static final BigDecimal MIN_SUBSLOT_SPAN = new BigDecimal("0.22");
+    private static final double MIXED_RACK_SUPPORT_THRESHOLD = 0.70d;
+    private static final BigDecimal LARGE_FOOTPRINT_SIDE_THRESHOLD = new BigDecimal("500");
+    private static final BigDecimal LARGE_FOOTPRINT_AREA_THRESHOLD = new BigDecimal("100000");
+    private static final Set<String> ALLOWED_HIERARCHY_SOURCES = new HashSet<>(Arrays.asList(
+            WarehouseOptimizeModels.WarehouseLocationHierarchySource.AREA_CODE,
+            WarehouseOptimizeModels.WarehouseLocationHierarchySource.RACK_CODE,
+            WarehouseOptimizeModels.WarehouseLocationHierarchySource.POSITION_CODE,
+            WarehouseOptimizeModels.WarehouseLocationHierarchySource.LEVEL_CODE
+    ));
     private static final Map<String, StatusDefinition> INBOUND_WORKING_STATUS_DEFINITIONS = new LinkedHashMap<>();
     private static final Map<String, StatusDefinition> OUTBOUND_WORKING_STATUS_DEFINITIONS = new LinkedHashMap<>();
 
@@ -110,10 +137,53 @@ public class WarehouseOptimizeService {
     public WarehouseOptimizeModels.WarehouseProfileDetail saveProfile(WarehouseOptimizeRequests.SaveProfileRequest request) {
         String layoutJson = repository.toJson(request.getLayoutData());
         Long profileId = repository.saveProfile(tenantContext.getCompanyCode(), tenantContext.getWarehouseCode(), request, layoutJson);
-        return getProfile(profileId);
+        WarehouseOptimizeModels.WarehouseProfileSummary savedProfile = getProfileSummary(profileId);
+        return buildSavedProfileResponse(savedProfile, layoutJson);
+    }
+
+    public WarehouseOptimizeModels.WarehouseLocationHierarchyResponse getLocationHierarchy(String requestedCustomerCode) {
+        String companyCode = requireCompanyCode();
+        String warehouseCode = requireWarehouseCode();
+        String customerCode = resolveRequestedHierarchyCustomerCode(requestedCustomerCode);
+        return buildHierarchyResponse(companyCode, warehouseCode, customerCode);
+    }
+
+    public WarehouseOptimizeModels.WarehouseLocationHierarchyResponse saveLocationHierarchy(
+            WarehouseOptimizeRequests.WarehouseLocationHierarchyRequest request) {
+        String companyCode = requireCompanyCode();
+        String warehouseCode = requireWarehouseCode();
+        String normalizedScope = normalizeHierarchyScope(request == null ? null : request.getScope());
+        WarehouseOptimizeModels.WarehouseLocationHierarchyMapping mapping = copyHierarchyMapping(
+                request == null ? null : request.getMapping());
+        validateHierarchyMapping(mapping);
+        String scopedCustomerCode = WarehouseOptimizeModels.WarehouseLocationHierarchyScope.WAREHOUSE.equals(normalizedScope)
+                ? null
+                : resolveScopedHierarchyCustomerCode(request == null ? null : request.getCustomerCode());
+        repository.saveLocationHierarchySetting(companyCode, warehouseCode, scopedCustomerCode, mapping);
+        return buildHierarchyResponse(
+                companyCode,
+                warehouseCode,
+                resolveRequestedHierarchyCustomerCode(request == null ? null : request.getCustomerCode()));
+    }
+
+    public WarehouseOptimizeModels.WarehouseLocationHierarchyResponse deleteLocationHierarchy(
+            String scope,
+            String requestedCustomerCode) {
+        String companyCode = requireCompanyCode();
+        String warehouseCode = requireWarehouseCode();
+        String normalizedScope = normalizeHierarchyScope(scope);
+        String scopedCustomerCode = WarehouseOptimizeModels.WarehouseLocationHierarchyScope.WAREHOUSE.equals(normalizedScope)
+                ? null
+                : resolveScopedHierarchyCustomerCode(requestedCustomerCode);
+        repository.deleteLocationHierarchySetting(companyCode, warehouseCode, scopedCustomerCode);
+        return buildHierarchyResponse(companyCode, warehouseCode, resolveRequestedHierarchyCustomerCode(requestedCustomerCode));
     }
 
     public WarehouseOptimizeModels.AutoGeneratedLayoutResponse autoGenerateLayout() {
+        return autoGenerateLayout(null);
+    }
+
+    public WarehouseOptimizeModels.AutoGeneratedLayoutResponse autoGenerateLayout(String requestedCustomerCode) {
         String companyCode = defaultIfBlank(tenantContext.getCompanyCode(), null);
         String warehouseCode = defaultIfBlank(tenantContext.getWarehouseCode(), null);
         if (companyCode == null || warehouseCode == null) {
@@ -122,7 +192,9 @@ public class WarehouseOptimizeService {
 
         List<WarehouseOptimizeModels.OracleLocationMasterRow> rows =
                 repository.loadOracleLocationMasterRows(companyCode, warehouseCode);
-        return synthesizeLayout(rows);
+        WarehouseOptimizeModels.WarehouseLocationHierarchySetting hierarchySetting =
+                resolveEffectiveHierarchySetting(companyCode, warehouseCode, resolveScopedHierarchyCustomerCode(requestedCustomerCode));
+        return synthesizeLayout(rows, hierarchySetting == null ? null : hierarchySetting.getMapping());
     }
 
     public List<WarehouseOptimizeModels.ProductRecord> getProducts() {
@@ -449,14 +521,18 @@ public class WarehouseOptimizeService {
     public WarehouseOptimizeModels.StockSyncSnapshot syncStock(Long profileId, String requestedCustomerCode, Object layoutDataOverride) {
         getProfileSummary(profileId);
         String customerCode = resolveAuthorizedCustomer(requestedCustomerCode);
+        WarehouseOptimizeModels.WarehouseLocationHierarchySetting hierarchySetting = resolveEffectiveHierarchySetting(
+                requireCompanyCode(),
+                requireWarehouseCode(),
+                customerCode);
         List<WarehouseOptimizeModels.WarehouseLayoutLocation> viewerLocations =
                 resolveViewerLocations(profileId, layoutDataOverride);
-        List<Map<String, Object>> rows = repository.loadOracleStockRows(
+        List<WarehouseOptimizeModels.OracleStockRow> rows = repository.loadOracleStockRows(
                 tenantContext.getCompanyCode(),
                 tenantContext.getWarehouseCode(),
                 customerCode,
                 null);
-        return buildSnapshot(profileId, viewerLocations, customerCode, rows, null, true);
+        return buildSnapshot(profileId, viewerLocations, customerCode, rows, hierarchySetting == null ? null : hierarchySetting.getMapping(), null, true);
     }
 
     public WarehouseOptimizeModels.StockDelta loadStockDelta(
@@ -466,9 +542,13 @@ public class WarehouseOptimizeService {
             Object layoutDataOverride) {
         getProfileSummary(profileId);
         String customerCode = resolveAuthorizedCustomer(requestedCustomerCode);
+        WarehouseOptimizeModels.WarehouseLocationHierarchySetting hierarchySetting = resolveEffectiveHierarchySetting(
+                requireCompanyCode(),
+                requireWarehouseCode(),
+                customerCode);
         List<WarehouseOptimizeModels.WarehouseLayoutLocation> viewerLocations =
                 resolveViewerLocations(profileId, layoutDataOverride);
-        List<Map<String, Object>> rows = repository.loadOracleStockRows(
+        List<WarehouseOptimizeModels.OracleStockRow> rows = repository.loadOracleStockRows(
                 tenantContext.getCompanyCode(),
                 tenantContext.getWarehouseCode(),
                 customerCode,
@@ -486,6 +566,7 @@ public class WarehouseOptimizeService {
                 viewerLocations,
                 customerCode,
                 rows,
+                hierarchySetting == null ? null : hierarchySetting.getMapping(),
                 previousCursor,
                 false);
         WarehouseOptimizeModels.StockDelta delta = new WarehouseOptimizeModels.StockDelta();
@@ -522,10 +603,13 @@ public class WarehouseOptimizeService {
     }
 
     private WarehouseOptimizeModels.AutoGeneratedLayoutResponse synthesizeLayout(
-            List<WarehouseOptimizeModels.OracleLocationMasterRow> sourceRows) {
+            List<WarehouseOptimizeModels.OracleLocationMasterRow> sourceRows,
+            WarehouseOptimizeModels.WarehouseLocationHierarchyMapping hierarchyMapping) {
         WarehouseOptimizeModels.AutoGeneratedLayoutResponse response = new WarehouseOptimizeModels.AutoGeneratedLayoutResponse();
         WarehouseOptimizeModels.AutoGeneratedLayoutSummary summary = response.getSummary();
         LinkedHashSet<String> warnings = new LinkedHashSet<>();
+        boolean hierarchyActive = hierarchyMapping != null;
+        boolean hierarchyUsesSlot = hierarchyActive && defaultIfBlank(hierarchyMapping.getSlot(), null) != null;
 
         if (sourceRows == null || sourceRows.isEmpty()) {
             WarehouseOptimizeModels.WarehouseLayout emptyLayout = new WarehouseOptimizeModels.WarehouseLayout();
@@ -534,75 +618,110 @@ public class WarehouseOptimizeService {
             emptyLayout.setBoundaryPolygon(null);
             emptyLayout.setAisles(new ArrayList<>());
             response.setLayout(emptyLayout);
+            summary.setWarehouseWidth(emptyLayout.getWarehouseWidth());
+            summary.setWarehouseHeight(emptyLayout.getWarehouseHeight());
             warnings.add("No active GWH_TM_LOC rows were found for the current warehouse.");
             response.setWarnings(new ArrayList<>(warnings));
             return response;
         }
 
         Map<String, List<GeneratedLocationSeed>> areaMap = new LinkedHashMap<>();
+        Map<String, String> areaDisplayLabels = new LinkedHashMap<>();
         int inferredPositions = 0;
         int inferredLevels = 0;
         int skippedRows = 0;
+        int normalizedDimensionRows = 0;
+        int normalizedHeightRows = 0;
 
         for (WarehouseOptimizeModels.OracleLocationMasterRow row : sourceRows) {
-            String areaCode = trimmed(row.getAreaCode());
-            if (areaCode == null) {
+            ResolvedHierarchyParts resolved = hierarchyActive
+                    ? resolveMappedLocationMasterParts(row, hierarchyMapping)
+                    : resolveDefaultLocationMasterParts(row);
+            if (!resolved.valid) {
                 skippedRows++;
-                warnings.add("Skipped location " + defaultIfBlank(trimmed(row.getLocationCode()), "(blank LOC_COD)") + " because LOC_AREA_COD is blank.");
+                warnings.add("Skipped location " + defaultIfBlank(trimmed(row.getLocationCode()), "(blank LOC_COD)") + " because " + resolved.invalidReason + ".");
                 continue;
             }
 
             GeneratedLocationSeed seed = new GeneratedLocationSeed();
             seed.locationCode = trimmed(row.getLocationCode());
-            seed.areaCode = areaCode;
+            seed.groupKey = resolved.groupKey;
+            seed.areaCode = resolved.zone;
+            seed.aisleCode = resolved.aisle;
             seed.areaName = trimmed(row.getAreaName());
-            seed.rackCode = defaultIfBlank(trimmed(row.getRackCode()), SYNTHETIC_RACK_KEY);
-            seed.positionCode = trimmed(row.getPositionCode());
-            seed.levelCode = defaultIfBlank(trimmed(row.getLevelCode()), "1");
-            seed.length = row.getLength();
-            seed.width = row.getWidth();
-            seed.sourceRackCode = trimmed(row.getRackCode());
-            seed.sourcePositionCode = trimmed(row.getPositionCode());
+            seed.rackCode = hierarchyActive
+                    ? SYNTHETIC_RACK_KEY
+                    : defaultIfBlank(trimmed(row.getRackCode()), SYNTHETIC_RACK_KEY);
+            seed.positionCode = hierarchyActive ? resolved.bay : resolved.bay;
+            seed.slotCode = hierarchyUsesSlot ? resolved.slot : null;
+            seed.levelCode = resolved.level;
+            NormalizedMeasurement normalizedLength = normalizeMeasurement(row.getLength(), MIN_BAY_DEPTH, MAX_BAY_DEPTH);
+            NormalizedMeasurement normalizedWidth = normalizeMeasurement(row.getWidth(), MIN_BAY_WIDTH, MAX_BAY_WIDTH);
+            NormalizedMeasurement normalizedHeight = normalizeMeasurement(row.getHeight(), MIN_LEVEL_HEIGHT, MAX_LEVEL_HEIGHT);
+            seed.length = normalizedLength.value;
+            seed.width = normalizedWidth.value;
+            seed.height = normalizedHeight.value;
+            seed.dimensionNormalized = normalizedLength.scaled || normalizedWidth.scaled;
+            seed.heightNormalized = normalizedHeight.scaled;
+            seed.sourceRackCode = hierarchyActive ? resolved.bay : trimmed(row.getRackCode());
+            seed.sourcePositionCode = hierarchyActive ? resolved.slot : trimmed(row.getPositionCode());
             seed.sourceLevelCode = trimmed(row.getLevelCode());
 
-            if (seed.sourcePositionCode == null) {
+            if (!hierarchyActive && seed.sourcePositionCode == null) {
                 inferredPositions++;
             }
-            if (seed.sourceLevelCode == null) {
+            if (!hierarchyActive && seed.sourceLevelCode == null) {
                 inferredLevels++;
             }
+            if (seed.dimensionNormalized) {
+                normalizedDimensionRows++;
+            }
+            if (seed.heightNormalized) {
+                normalizedHeightRows++;
+            }
 
-            areaMap.computeIfAbsent(areaCode, key -> new ArrayList<>()).add(seed);
+            areaMap.computeIfAbsent(seed.groupKey, key -> new ArrayList<>()).add(seed);
+            areaDisplayLabels.putIfAbsent(seed.groupKey, areaDisplayLabel(seed.areaCode, seed.aisleCode));
         }
 
         List<String> orderedAreas = new ArrayList<>(areaMap.keySet());
-        orderedAreas.sort(this::naturalCompare);
+        orderedAreas.sort((left, right) -> naturalCompare(
+                defaultIfBlank(areaDisplayLabels.get(left), left),
+                defaultIfBlank(areaDisplayLabels.get(right), right)));
 
         Set<String> seenCanonicalLocations = new HashSet<>();
         List<GeneratedAreaLayout> generatedAreas = new ArrayList<>();
         int totalRacks = 0;
         int totalLocations = 0;
+        int rotatedAreas = 0;
+        int mixedAreasDetected = 0;
+        int mixedAreasUncertain = 0;
 
         for (int areaIndex = 0; areaIndex < orderedAreas.size(); areaIndex++) {
-            String areaCode = orderedAreas.get(areaIndex);
-            List<GeneratedLocationSeed> areaRows = areaMap.get(areaCode);
+            String groupKey = orderedAreas.get(areaIndex);
+            List<GeneratedLocationSeed> areaRows = areaMap.get(groupKey);
+            String areaLabel = defaultIfBlank(areaDisplayLabels.get(groupKey), groupKey);
 
-            List<GeneratedLocationSeed> missingPositionRows = areaRows.stream()
-                    .filter(seed -> seed.positionCode == null)
-                    .sorted(Comparator.comparing(
-                            seed -> defaultIfBlank(seed.locationCode, ""),
-                            this::naturalCompare))
-                    .collect(Collectors.toList());
-            for (int positionIndex = 0; positionIndex < missingPositionRows.size(); positionIndex++) {
-                missingPositionRows.get(positionIndex).positionCode = String.format("AUTO_PSTN_%05d", positionIndex + 1);
+            if (!hierarchyActive) {
+                List<GeneratedLocationSeed> missingPositionRows = areaRows.stream()
+                        .filter(seed -> seed.positionCode == null)
+                        .sorted(Comparator.comparing(
+                                seed -> defaultIfBlank(seed.locationCode, ""),
+                                this::naturalCompare))
+                        .collect(Collectors.toList());
+                for (int positionIndex = 0; positionIndex < missingPositionRows.size(); positionIndex++) {
+                    missingPositionRows.get(positionIndex).positionCode = String.format("AUTO_PSTN_%05d", positionIndex + 1);
+                }
             }
 
             List<GeneratedLocationSeed> deduplicatedRows = new ArrayList<>();
             for (GeneratedLocationSeed seed : areaRows) {
-                String canonicalLocation = canonicalLocation(seed.areaCode, seed.rackCode, seed.positionCode, seed.levelCode);
+                String canonicalLocation = hierarchyActive
+                        ? canonicalLocation(seed.areaCode, seed.aisleCode, seed.positionCode, seed.slotCode, seed.levelCode)
+                        : canonicalLocation(seed.areaCode, seed.rackCode, seed.positionCode, seed.levelCode);
                 if (!seenCanonicalLocations.add(canonicalLocation)) {
                     skippedRows++;
-                    warnings.add("Skipped duplicate canonical location " + canonicalLocation + " in area " + areaCode + ".");
+                    warnings.add("Skipped duplicate canonical location " + canonicalLocation + " in " + areaLabel + ".");
                     continue;
                 }
                 seed.canonicalLocation = canonicalLocation;
@@ -610,14 +729,23 @@ public class WarehouseOptimizeService {
             }
 
             if (deduplicatedRows.isEmpty()) {
-                warnings.add("Area " + areaCode + " was ignored because no unique locations remained after normalization.");
+                warnings.add(areaLabel + " was ignored because no unique locations remained after normalization.");
                 continue;
             }
 
-            GeneratedAreaLayout generatedArea = buildGeneratedArea(areaCode, areaIndex + 1, deduplicatedRows);
+            GeneratedAreaLayout generatedArea = buildGeneratedArea(
+                    deduplicatedRows.get(0).areaCode,
+                    deduplicatedRows.get(0).aisleCode,
+                    areaIndex + 1,
+                    deduplicatedRows,
+                    hierarchyUsesSlot);
             generatedAreas.add(generatedArea);
             totalRacks += generatedArea.rackCount;
             totalLocations += generatedArea.aisle.getLocations().size();
+            rotatedAreas += generatedArea.rotated ? 1 : 0;
+            mixedAreasDetected += generatedArea.mixedDetected ? 1 : 0;
+            mixedAreasUncertain += generatedArea.mixedUncertain ? 1 : 0;
+            warnings.addAll(generatedArea.warnings);
         }
 
         WarehouseOptimizeModels.WarehouseLayout layout = packGeneratedAreas(generatedAreas);
@@ -629,9 +757,31 @@ public class WarehouseOptimizeService {
         summary.setInferredPositions(inferredPositions);
         summary.setInferredLevels(inferredLevels);
         summary.setSkippedRows(skippedRows);
+        summary.setWarehouseWidth(layout.getWarehouseWidth());
+        summary.setWarehouseHeight(layout.getWarehouseHeight());
+        summary.setNormalizedDimensionRows(normalizedDimensionRows);
+        summary.setNormalizedHeightRows(normalizedHeightRows);
+        summary.setRotatedAreas(rotatedAreas);
+        summary.setMixedAreasDetected(mixedAreasDetected);
+        summary.setMixedAreasUncertain(mixedAreasUncertain);
 
         if (generatedAreas.isEmpty()) {
             warnings.add("No layout areas could be generated from the current warehouse location master.");
+        }
+        if (normalizedDimensionRows > 0) {
+            warnings.add(normalizedDimensionRows + " location rows used normalized LOC_LEN or LOC_WID values to keep the generated layout realistic.");
+        }
+        if (normalizedHeightRows > 0) {
+            warnings.add(normalizedHeightRows + " location rows used normalized LOC_HIG values for mixed shelf-to-rack detection.");
+        }
+        if (mixedAreasUncertain > 0) {
+            warnings.add(mixedAreasUncertain + " areas showed possible mixed shelf-to-rack patterns but were left unchanged because the signal was not clear enough.");
+        }
+        BigDecimal footprintArea = zeroIfNull(layout.getWarehouseWidth()).multiply(zeroIfNull(layout.getWarehouseHeight()));
+        if (zeroIfNull(layout.getWarehouseWidth()).compareTo(LARGE_FOOTPRINT_SIDE_THRESHOLD) > 0
+                || zeroIfNull(layout.getWarehouseHeight()).compareTo(LARGE_FOOTPRINT_SIDE_THRESHOLD) > 0
+                || footprintArea.compareTo(LARGE_FOOTPRINT_AREA_THRESHOLD) > 0) {
+            warnings.add("Generated warehouse footprint is still unusually large. Review area master granularity and dimension quality for this warehouse.");
         }
 
         response.setWarnings(new ArrayList<>(warnings));
@@ -640,13 +790,17 @@ public class WarehouseOptimizeService {
 
     private GeneratedAreaLayout buildGeneratedArea(
             String areaCode,
+            String aisleCode,
             int areaOrdinal,
-            List<GeneratedLocationSeed> areaRows) {
-        List<String> rackCodes = areaRows.stream()
-                .map(seed -> seed.rackCode)
-                .distinct()
-                .sorted(this::naturalCompare)
-                .collect(Collectors.toList());
+            List<GeneratedLocationSeed> areaRows,
+            boolean explicitBaySlotMode) {
+        List<String> rackCodes = explicitBaySlotMode
+                ? Collections.singletonList(SYNTHETIC_RACK_KEY)
+                : areaRows.stream()
+                        .map(seed -> seed.rackCode)
+                        .distinct()
+                        .sorted(this::naturalCompare)
+                        .collect(Collectors.toList());
         List<String> positionCodes = areaRows.stream()
                 .map(seed -> seed.positionCode)
                 .distinct()
@@ -680,27 +834,50 @@ public class WarehouseOptimizeService {
                 areaRows.stream().map(seed -> seed.width).collect(Collectors.toList()),
                 DEFAULT_BAY_WIDTH);
         BigDecimal aisleWidth = DEFAULT_AISLE_WIDTH;
-        int rackCount = Math.max(1, rackCodes.size());
+        int rackCount = explicitBaySlotMode ? 1 : Math.max(1, rackCodes.size());
         int positionCount = Math.max(1, positionCodes.size());
-        boolean hasUsableRackStructure = areaRows.stream()
+        boolean hasUsableRackStructure = explicitBaySlotMode || areaRows.stream()
                 .anyMatch(seed -> seed.sourceRackCode != null || seed.sourcePositionCode != null);
+        int levels = Math.max(1, levelCodes.size());
+        MixedDetectionResult mixedDetection = hasUsableRackStructure
+                ? detectMixedLowerShelfLevels(areaCode, rackCodes, areaRows, levelIndexMap)
+                : MixedDetectionResult.none();
+        PositionLayoutPlan positionLayoutPlan = explicitBaySlotMode
+                ? buildSlotPlacementPlan(areaRows, positionCodes, levelIndexMap, bayWidth)
+                : buildPositionLayoutPlan(
+                        areaRows,
+                        rackCodes,
+                        positionCodes,
+                        levelIndexMap,
+                        mixedDetection.lowerShelfLevels,
+                        bayWidth);
+        positionCount = Math.max(1, positionLayoutPlan.structuralPositionCount);
+        BigDecimal positionSpan = roundLayoutNumber(bayWidth.multiply(BigDecimal.valueOf(positionCount)));
+        RackPackingPlan rackPackingPlan = chooseRackPackingPlan(rackCount, bayDepth, aisleWidth, positionSpan);
+
+        BigDecimal verticalWidth = roundLayoutNumber(rackPackingPlan.width);
+        BigDecimal verticalHeight = roundLayoutNumber(rackPackingPlan.height);
+        BigDecimal horizontalWidth = roundLayoutNumber(verticalHeight);
+        BigDecimal horizontalHeight = roundLayoutNumber(verticalWidth);
+        boolean rotateArea = shouldRotateArea(verticalWidth, verticalHeight, horizontalWidth, horizontalHeight);
 
         WarehouseOptimizeModels.WarehouseAisle aisle = new WarehouseOptimizeModels.WarehouseAisle();
         aisle.setId(areaOrdinal);
         aisle.setX(BigDecimal.ZERO);
         aisle.setY(BigDecimal.ZERO);
-        aisle.setWidth(roundLayoutNumber(bayDepth.multiply(BigDecimal.valueOf(rackCount))
-                .add(aisleWidth.multiply(BigDecimal.valueOf(Math.max(rackCount - 1, 0))))));
-        aisle.setHeight(roundLayoutNumber(bayWidth.multiply(BigDecimal.valueOf(positionCount))));
+        aisle.setWidth(rotateArea ? horizontalWidth : verticalWidth);
+        aisle.setHeight(rotateArea ? horizontalHeight : verticalHeight);
         aisle.setType(hasUsableRackStructure ? "HIGH_RACK" : "FLOOR");
-        aisle.setDirection("VERTICAL");
-        aisle.setLevels(Math.max(1, levelCodes.size()));
+        aisle.setDirection(rotateArea ? "HORIZONTAL" : "VERTICAL");
+        aisle.setLevels(levels);
         aisle.setZone(areaCode);
+        aisle.setAisleCode(aisleCode);
         aisle.setBayDepth(roundLayoutNumber(bayDepth));
         aisle.setBayWidth(roundLayoutNumber(bayWidth));
         aisle.setAisleWidth(roundLayoutNumber(aisleWidth));
         aisle.setTunnelLevelFrom(1);
         aisle.setTunnelLevelTo(aisle.getLevels());
+        aisle.setLowerShelfLevels(aisle.getType().equals("HIGH_RACK") ? mixedDetection.lowerShelfLevels : 0);
         aisle.setPickFaceLevels(Collections.singletonList(1));
         aisle.setStartPointX(BigDecimal.ZERO);
         aisle.setStartPointY(BigDecimal.ZERO);
@@ -715,6 +892,10 @@ public class WarehouseOptimizeService {
             if (positionCompare != 0) {
                 return positionCompare;
             }
+            int slotCompare = naturalCompare(left.slotCode, right.slotCode);
+            if (slotCompare != 0) {
+                return slotCompare;
+            }
             int levelCompare = naturalCompare(left.levelCode, right.levelCode);
             if (levelCompare != 0) {
                 return levelCompare;
@@ -725,20 +906,46 @@ public class WarehouseOptimizeService {
         List<WarehouseOptimizeModels.WarehouseLayoutLocation> locations = new ArrayList<>();
         for (GeneratedLocationSeed seed : orderedRows) {
             int rackIndex = rackIndexMap.get(seed.rackCode);
-            int positionOrdinal = positionIndexMap.get(seed.positionCode);
+            PositionPlacement placement = positionLayoutPlan.placements.get(seed.canonicalLocation);
+            int positionOrdinal = placement == null
+                    ? positionIndexMap.get(seed.positionCode)
+                    : placement.positionOrdinal;
             int levelOrdinal = levelIndexMap.get(seed.levelCode);
+            int rackRow = rackPackingPlan.rackRow(rackIndex);
+            int rackColumn = rackPackingPlan.rackColumn(rackIndex);
+            BigDecimal rackOffset = BigDecimal.valueOf(rackColumn).multiply(bayDepth.add(aisleWidth));
+            BigDecimal rowOffset = BigDecimal.valueOf(rackRow).multiply(positionSpan.add(INTERNAL_RACK_ROW_GAP));
+            BigDecimal positionOffset = placement == null
+                    ? BigDecimal.valueOf(positionOrdinal - 1).multiply(bayWidth)
+                    : placement.axisOffset;
 
             WarehouseOptimizeModels.WarehouseLayoutLocation location = new WarehouseOptimizeModels.WarehouseLayoutLocation();
             location.setLocation(seed.canonicalLocation);
             location.setZone(areaCode);
-            location.setType(aisle.getType());
+            String locationType = aisle.getType();
+            if ("HIGH_RACK".equals(aisle.getType())
+                    && aisle.getLowerShelfLevels() != null
+                    && levelOrdinal <= aisle.getLowerShelfLevels()) {
+                locationType = "SHELF";
+            }
+            location.setType(locationType);
             location.setLevel(levelOrdinal);
             location.setAisle(areaOrdinal);
             location.setPosition(positionOrdinal);
             location.setSide(null);
-            location.setX(roundLayoutNumber(BigDecimal.valueOf(rackIndex)
-                    .multiply(bayDepth.add(aisleWidth))));
-            location.setY(roundLayoutNumber(BigDecimal.valueOf(positionOrdinal - 1).multiply(bayWidth)));
+            if (rotateArea) {
+                location.setX(roundLayoutNumber(rowOffset.add(positionOffset)));
+                location.setY(roundLayoutNumber(rackOffset));
+                if (placement != null && placement.axisSpan != null) {
+                    location.setFootprintWidth(roundLayoutNumber(placement.axisSpan));
+                }
+            } else {
+                location.setX(roundLayoutNumber(rackOffset));
+                location.setY(roundLayoutNumber(rowOffset.add(positionOffset)));
+                if (placement != null && placement.axisSpan != null) {
+                    location.setFootprintDepth(roundLayoutNumber(placement.axisSpan));
+                }
+            }
             locations.add(location);
         }
         aisle.setLocations(locations);
@@ -746,7 +953,264 @@ public class WarehouseOptimizeService {
         GeneratedAreaLayout generatedArea = new GeneratedAreaLayout();
         generatedArea.aisle = aisle;
         generatedArea.rackCount = rackCount;
+        generatedArea.rotated = rotateArea;
+        generatedArea.mixedDetected = mixedDetection.lowerShelfLevels > 0;
+        generatedArea.mixedUncertain = mixedDetection.uncertain;
+        generatedArea.warnings.addAll(mixedDetection.warnings);
         return generatedArea;
+    }
+
+    private PositionLayoutPlan buildPositionLayoutPlan(
+            List<GeneratedLocationSeed> areaRows,
+            List<String> rackCodes,
+            List<String> positionCodes,
+            Map<String, Integer> levelIndexMap,
+            int lowerShelfLevels,
+            BigDecimal bayWidth) {
+        PositionLayoutPlan plan = new PositionLayoutPlan();
+        plan.structuralPositionCount = Math.max(1, positionCodes.size());
+        if (lowerShelfLevels <= 0) {
+            return plan;
+        }
+
+        Map<String, Map<Integer, List<GeneratedLocationSeed>>> rowsByRackAndLevel = new LinkedHashMap<>();
+        for (String rackCode : rackCodes) {
+            rowsByRackAndLevel.put(rackCode, new LinkedHashMap<>());
+        }
+        for (GeneratedLocationSeed seed : areaRows) {
+            Integer levelOrdinal = levelIndexMap.get(seed.levelCode);
+            if (levelOrdinal == null) {
+                continue;
+            }
+            rowsByRackAndLevel
+                    .computeIfAbsent(seed.rackCode, key -> new LinkedHashMap<>())
+                    .computeIfAbsent(levelOrdinal, key -> new ArrayList<>())
+                    .add(seed);
+        }
+        for (Map<Integer, List<GeneratedLocationSeed>> rowsByLevel : rowsByRackAndLevel.values()) {
+            for (List<GeneratedLocationSeed> seeds : rowsByLevel.values()) {
+                seeds.sort((left, right) -> {
+                    int positionCompare = naturalCompare(left.positionCode, right.positionCode);
+                    if (positionCompare != 0) {
+                        return positionCompare;
+                    }
+                    return naturalCompare(defaultIfBlank(left.locationCode, ""), defaultIfBlank(right.locationCode, ""));
+                });
+            }
+        }
+
+        if (lowerShelfLevels > 0) {
+            plan.structuralPositionCount = inferStructuralPositionCount(rowsByRackAndLevel, lowerShelfLevels, plan.structuralPositionCount);
+        }
+
+        for (Map<Integer, List<GeneratedLocationSeed>> rowsByLevel : rowsByRackAndLevel.values()) {
+            for (Map.Entry<Integer, List<GeneratedLocationSeed>> entry : rowsByLevel.entrySet()) {
+                assignPositionPlacements(plan, entry.getValue(), bayWidth);
+            }
+        }
+
+        return plan;
+    }
+
+    private PositionLayoutPlan buildSlotPlacementPlan(
+            List<GeneratedLocationSeed> areaRows,
+            List<String> positionCodes,
+            Map<String, Integer> levelIndexMap,
+            BigDecimal bayWidth) {
+        PositionLayoutPlan plan = new PositionLayoutPlan();
+        plan.structuralPositionCount = Math.max(1, positionCodes.size());
+
+        Map<String, Integer> positionIndexMap = new LinkedHashMap<>();
+        for (int index = 0; index < positionCodes.size(); index++) {
+            positionIndexMap.put(positionCodes.get(index), index + 1);
+        }
+
+        Map<String, Map<Integer, List<GeneratedLocationSeed>>> rowsByPositionAndLevel = new LinkedHashMap<>();
+        for (GeneratedLocationSeed seed : areaRows) {
+            Integer levelOrdinal = levelIndexMap.get(seed.levelCode);
+            Integer positionOrdinal = positionIndexMap.get(seed.positionCode);
+            if (levelOrdinal == null || positionOrdinal == null) {
+                continue;
+            }
+            rowsByPositionAndLevel
+                    .computeIfAbsent(seed.positionCode, key -> new LinkedHashMap<>())
+                    .computeIfAbsent(levelOrdinal, key -> new ArrayList<>())
+                    .add(seed);
+        }
+
+        for (Map.Entry<String, Map<Integer, List<GeneratedLocationSeed>>> positionEntry : rowsByPositionAndLevel.entrySet()) {
+            int positionOrdinal = positionIndexMap.get(positionEntry.getKey());
+            for (List<GeneratedLocationSeed> seeds : positionEntry.getValue().values()) {
+                seeds.sort((left, right) -> {
+                    int slotCompare = naturalCompare(left.slotCode, right.slotCode);
+                    if (slotCompare != 0) {
+                        return slotCompare;
+                    }
+                    return naturalCompare(defaultIfBlank(left.locationCode, ""), defaultIfBlank(right.locationCode, ""));
+                });
+                assignSlotPlacements(plan, seeds, positionOrdinal, bayWidth);
+            }
+        }
+
+        return plan;
+    }
+
+    private int inferStructuralPositionCount(
+            Map<String, Map<Integer, List<GeneratedLocationSeed>>> rowsByRackAndLevel,
+            int lowerShelfLevels,
+            int fallback) {
+        List<Integer> candidateCounts = new ArrayList<>();
+        for (Map<Integer, List<GeneratedLocationSeed>> rowsByLevel : rowsByRackAndLevel.values()) {
+            for (Map.Entry<Integer, List<GeneratedLocationSeed>> entry : rowsByLevel.entrySet()) {
+                if (entry.getKey() <= lowerShelfLevels || entry.getValue().isEmpty()) {
+                    continue;
+                }
+                candidateCounts.add(entry.getValue().size());
+            }
+        }
+        if (candidateCounts.isEmpty()) {
+            return Math.max(1, fallback);
+        }
+        Collections.sort(candidateCounts);
+        int middle = candidateCounts.size() / 2;
+        int median = candidateCounts.size() % 2 == 0
+                ? (candidateCounts.get(middle - 1) + candidateCounts.get(middle)) / 2
+                : candidateCounts.get(middle);
+        return Math.max(1, Math.min(Math.max(median, 1), fallback));
+    }
+
+    private void assignPositionPlacements(
+            PositionLayoutPlan plan,
+            List<GeneratedLocationSeed> orderedLevelSeeds,
+            BigDecimal bayWidth) {
+        if (orderedLevelSeeds == null || orderedLevelSeeds.isEmpty()) {
+            return;
+        }
+
+        int structuralCount = Math.max(1, plan.structuralPositionCount);
+        int levelCount = orderedLevelSeeds.size();
+        Map<Integer, List<GeneratedLocationSeed>> seedsByOrdinal = new LinkedHashMap<>();
+        for (int index = 0; index < levelCount; index++) {
+            int ordinal = Math.min(structuralCount, (index * structuralCount) / levelCount + 1);
+            seedsByOrdinal.computeIfAbsent(ordinal, key -> new ArrayList<>()).add(orderedLevelSeeds.get(index));
+        }
+
+        for (Map.Entry<Integer, List<GeneratedLocationSeed>> entry : seedsByOrdinal.entrySet()) {
+            int ordinal = entry.getKey();
+            List<GeneratedLocationSeed> bucket = entry.getValue();
+            BigDecimal bucketSpan = bayWidth.divide(BigDecimal.valueOf(bucket.size()), 6, RoundingMode.HALF_UP);
+            BigDecimal axisSpan = clampSpan(bucketSpan.multiply(SUBSLOT_FILL_RATIO), bayWidth);
+            BigDecimal padding = bucketSpan.subtract(axisSpan).divide(new BigDecimal("2"), 6, RoundingMode.HALF_UP);
+            BigDecimal baseOffset = bayWidth.multiply(BigDecimal.valueOf(ordinal - 1));
+            for (int slotIndex = 0; slotIndex < bucket.size(); slotIndex++) {
+                GeneratedLocationSeed seed = bucket.get(slotIndex);
+                PositionPlacement placement = new PositionPlacement();
+                placement.positionOrdinal = ordinal;
+                placement.axisOffset = baseOffset
+                        .add(bucketSpan.multiply(BigDecimal.valueOf(slotIndex)))
+                        .add(padding);
+                if (bucket.size() > 1) {
+                    placement.axisSpan = axisSpan;
+                }
+                plan.placements.put(seed.canonicalLocation, placement);
+            }
+        }
+    }
+
+    private void assignSlotPlacements(
+            PositionLayoutPlan plan,
+            List<GeneratedLocationSeed> orderedSlotSeeds,
+            int positionOrdinal,
+            BigDecimal bayWidth) {
+        if (orderedSlotSeeds == null || orderedSlotSeeds.isEmpty()) {
+            return;
+        }
+
+        BigDecimal bucketSpan = bayWidth.divide(BigDecimal.valueOf(orderedSlotSeeds.size()), 6, RoundingMode.HALF_UP);
+        BigDecimal axisSpan = clampSpan(bucketSpan.multiply(SUBSLOT_FILL_RATIO), bayWidth);
+        BigDecimal padding = bucketSpan.subtract(zeroIfNull(axisSpan)).divide(new BigDecimal("2"), 6, RoundingMode.HALF_UP);
+        BigDecimal baseOffset = bayWidth.multiply(BigDecimal.valueOf(positionOrdinal - 1));
+
+        for (int slotIndex = 0; slotIndex < orderedSlotSeeds.size(); slotIndex++) {
+            GeneratedLocationSeed seed = orderedSlotSeeds.get(slotIndex);
+            PositionPlacement placement = new PositionPlacement();
+            placement.positionOrdinal = positionOrdinal;
+            placement.axisOffset = baseOffset
+                    .add(bucketSpan.multiply(BigDecimal.valueOf(slotIndex)))
+                    .add(axisSpan == null ? BigDecimal.ZERO : padding);
+            if (orderedSlotSeeds.size() > 1 && axisSpan != null) {
+                placement.axisSpan = axisSpan;
+            }
+            plan.placements.put(seed.canonicalLocation, placement);
+        }
+    }
+
+    private BigDecimal clampSpan(BigDecimal preferred, BigDecimal maximum) {
+        BigDecimal safePreferred = zeroIfNull(preferred);
+        BigDecimal safeMaximum = zeroIfNull(maximum);
+        if (safeMaximum.compareTo(BigDecimal.ZERO) <= 0) {
+            return null;
+        }
+        BigDecimal clamped = safePreferred.max(MIN_SUBSLOT_SPAN);
+        if (clamped.compareTo(safeMaximum) > 0) {
+            clamped = safeMaximum;
+        }
+        return clamped;
+    }
+
+    private RackPackingPlan chooseRackPackingPlan(
+            int rackCount,
+            BigDecimal bayDepth,
+            BigDecimal aisleWidth,
+            BigDecimal positionSpan) {
+        RackPackingPlan bestPlan = null;
+        int maxRackRows = Math.min(Math.max(rackCount, 1), 24);
+        for (int rackRows = 1; rackRows <= maxRackRows; rackRows++) {
+            RackPackingPlan candidate = new RackPackingPlan();
+            candidate.rackRows = rackRows;
+            candidate.racksPerRow = Math.max(1, (int) Math.ceil(rackCount / (double) rackRows));
+            candidate.width = stripSpan(candidate.racksPerRow, bayDepth, aisleWidth);
+            candidate.height = positionSpan.multiply(BigDecimal.valueOf(candidate.rackRows));
+            if (candidate.rackRows > 1) {
+                candidate.height = candidate.height.add(INTERNAL_RACK_ROW_GAP.multiply(BigDecimal.valueOf(candidate.rackRows - 1)));
+            }
+            candidate.maxSide = candidate.width.max(candidate.height);
+            candidate.footprintArea = candidate.width.multiply(candidate.height);
+            candidate.aspectPenalty = aspectPenalty(candidate.width, candidate.height);
+
+            if (bestPlan == null || compareRackPackingPlans(candidate, bestPlan) < 0) {
+                bestPlan = candidate;
+            }
+        }
+
+        if (bestPlan == null) {
+            bestPlan = new RackPackingPlan();
+            bestPlan.rackRows = 1;
+            bestPlan.racksPerRow = Math.max(1, rackCount);
+            bestPlan.width = stripSpan(bestPlan.racksPerRow, bayDepth, aisleWidth);
+            bestPlan.height = positionSpan;
+            bestPlan.maxSide = bestPlan.width.max(bestPlan.height);
+            bestPlan.footprintArea = bestPlan.width.multiply(bestPlan.height);
+            bestPlan.aspectPenalty = aspectPenalty(bestPlan.width, bestPlan.height);
+        }
+
+        return bestPlan;
+    }
+
+    private int compareRackPackingPlans(RackPackingPlan left, RackPackingPlan right) {
+        int maxSideCompare = left.maxSide.compareTo(right.maxSide);
+        if (maxSideCompare != 0) {
+            return maxSideCompare;
+        }
+        int areaCompare = left.footprintArea.compareTo(right.footprintArea);
+        if (areaCompare != 0) {
+            return areaCompare;
+        }
+        int aspectCompare = Double.compare(left.aspectPenalty, right.aspectPenalty);
+        if (aspectCompare != 0) {
+            return aspectCompare;
+        }
+        return Integer.compare(left.rackRows, right.rackRows);
     }
 
     private WarehouseOptimizeModels.WarehouseLayout packGeneratedAreas(List<GeneratedAreaLayout> generatedAreas) {
@@ -760,45 +1224,33 @@ public class WarehouseOptimizeService {
         }
 
         int areaCount = generatedAreas.size();
-        int areasPerRow = (int) Math.ceil(Math.sqrt(areaCount));
-        int rowCount = (int) Math.ceil(areaCount / (double) areasPerRow);
-        int actualColumns = Math.min(areasPerRow, areaCount);
-
-        BigDecimal[] columnWidths = new BigDecimal[actualColumns];
-        BigDecimal[] rowHeights = new BigDecimal[rowCount];
-        for (int index = 0; index < actualColumns; index++) {
-            columnWidths[index] = BigDecimal.ZERO;
-        }
-        for (int index = 0; index < rowCount; index++) {
-            rowHeights[index] = BigDecimal.ZERO;
-        }
-
-        for (int index = 0; index < generatedAreas.size(); index++) {
-            GeneratedAreaLayout generatedArea = generatedAreas.get(index);
-            int row = index / areasPerRow;
-            int column = index % areasPerRow;
-            if (column >= actualColumns) {
-                continue;
+        PackedGrid bestGrid = null;
+        int maxColumns = Math.min(areaCount, 60);
+        for (int columnCount = 1; columnCount <= maxColumns; columnCount++) {
+            PackedGrid candidate = buildPackedGrid(generatedAreas, columnCount);
+            if (bestGrid == null || comparePackedGrids(candidate, bestGrid) < 0) {
+                bestGrid = candidate;
             }
-            columnWidths[column] = columnWidths[column].max(generatedArea.aisle.getWidth());
-            rowHeights[row] = rowHeights[row].max(generatedArea.aisle.getHeight());
+        }
+        if (bestGrid == null) {
+            bestGrid = buildPackedGrid(generatedAreas, Math.max(1, (int) Math.ceil(Math.sqrt(areaCount))));
         }
 
         List<WarehouseOptimizeModels.WarehouseAisle> aisles = new ArrayList<>();
         for (int index = 0; index < generatedAreas.size(); index++) {
             GeneratedAreaLayout generatedArea = generatedAreas.get(index);
             WarehouseOptimizeModels.WarehouseAisle aisle = generatedArea.aisle;
-            int row = index / areasPerRow;
-            int column = index % areasPerRow;
+            int row = index / bestGrid.columns;
+            int column = index % bestGrid.columns;
 
             BigDecimal offsetX = OUTER_PADDING;
             for (int cursor = 0; cursor < column; cursor++) {
-                offsetX = offsetX.add(columnWidths[cursor]).add(AREA_GAP);
+                offsetX = offsetX.add(bestGrid.columnWidths[cursor]).add(AREA_GAP);
             }
 
             BigDecimal offsetY = OUTER_PADDING;
             for (int cursor = 0; cursor < row; cursor++) {
-                offsetY = offsetY.add(rowHeights[cursor]).add(AREA_GAP);
+                offsetY = offsetY.add(bestGrid.rowHeights[cursor]).add(AREA_GAP);
             }
 
             aisle.setX(roundLayoutNumber(offsetX));
@@ -813,32 +1265,259 @@ public class WarehouseOptimizeService {
             aisles.add(aisle);
         }
 
-        BigDecimal warehouseWidth = OUTER_PADDING.multiply(new BigDecimal("2"));
-        for (int index = 0; index < actualColumns; index++) {
-            warehouseWidth = warehouseWidth.add(columnWidths[index]);
-            if (index < actualColumns - 1) {
-                warehouseWidth = warehouseWidth.add(AREA_GAP);
-            }
-        }
-
-        BigDecimal warehouseHeight = OUTER_PADDING.multiply(new BigDecimal("2"));
-        for (int index = 0; index < rowCount; index++) {
-            warehouseHeight = warehouseHeight.add(rowHeights[index]);
-            if (index < rowCount - 1) {
-                warehouseHeight = warehouseHeight.add(AREA_GAP);
-            }
-        }
-
-        layout.setWarehouseWidth(roundLayoutNumber(warehouseWidth));
-        layout.setWarehouseHeight(roundLayoutNumber(warehouseHeight));
+        layout.setWarehouseWidth(roundLayoutNumber(bestGrid.totalWidth));
+        layout.setWarehouseHeight(roundLayoutNumber(bestGrid.totalHeight));
         layout.setAisles(aisles);
         return layout;
+    }
+
+    private WarehouseOptimizeModels.WarehouseLocationHierarchyResponse buildHierarchyResponse(
+            String companyCode,
+            String warehouseCode,
+            String customerCode) {
+        WarehouseOptimizeModels.WarehouseLocationHierarchySetting warehouseDefault =
+                repository.findLocationHierarchySetting(companyCode, warehouseCode, null);
+        WarehouseOptimizeModels.WarehouseLocationHierarchySetting customerOverride =
+                customerCode == null ? null : repository.findLocationHierarchySetting(companyCode, warehouseCode, customerCode);
+        WarehouseOptimizeModels.WarehouseLocationHierarchyResponse response = new WarehouseOptimizeModels.WarehouseLocationHierarchyResponse();
+        response.setWarehouseDefault(warehouseDefault);
+        response.setCustomerOverride(customerOverride);
+        response.setEffective(customerOverride != null ? customerOverride : warehouseDefault);
+        return response;
+    }
+
+    private WarehouseOptimizeModels.WarehouseLocationHierarchySetting resolveEffectiveHierarchySetting(
+            String companyCode,
+            String warehouseCode,
+            String customerCode) {
+        WarehouseOptimizeModels.WarehouseLocationHierarchySetting customerOverride =
+                customerCode == null ? null : repository.findLocationHierarchySetting(companyCode, warehouseCode, customerCode);
+        if (customerOverride != null) {
+            return customerOverride;
+        }
+        return repository.findLocationHierarchySetting(companyCode, warehouseCode, null);
+    }
+
+    private String requireCompanyCode() {
+        String companyCode = defaultIfBlank(tenantContext.getCompanyCode(), null);
+        if (companyCode == null) {
+            throw new IllegalStateException("Tenant company context is not available");
+        }
+        return companyCode;
+    }
+
+    private WarehouseOptimizeModels.WarehouseProfileDetail buildSavedProfileResponse(
+            WarehouseOptimizeModels.WarehouseProfileSummary summary,
+            String layoutJson) {
+        WarehouseOptimizeModels.WarehouseProfileDetail detail = new WarehouseOptimizeModels.WarehouseProfileDetail();
+        detail.setId(summary.getId());
+        detail.setCompanyCode(summary.getCompanyCode());
+        detail.setWarehouseCode(summary.getWarehouseCode());
+        detail.setCustomerCode(summary.getCustomerCode());
+        detail.setProfileName(summary.getProfileName());
+        detail.setDescription(summary.getDescription());
+        detail.setWarehouseLength(summary.getWarehouseLength());
+        detail.setWarehouseWidth(summary.getWarehouseWidth());
+        detail.setCreatedAt(summary.getCreatedAt());
+        detail.setUpdatedAt(summary.getUpdatedAt());
+        detail.setSharedProfile(summary.isSharedProfile());
+        detail.setLayoutData(layoutJson);
+        detail.setLocations(Collections.emptyList());
+        return detail;
+    }
+
+    private String requireWarehouseCode() {
+        String warehouseCode = defaultIfBlank(tenantContext.getWarehouseCode(), null);
+        if (warehouseCode == null) {
+            throw new IllegalStateException("Tenant warehouse context is not available");
+        }
+        return warehouseCode;
+    }
+
+    private String resolveRequestedHierarchyCustomerCode(String requestedCustomerCode) {
+        String desired = defaultIfBlank(requestedCustomerCode, null);
+        return desired == null ? null : resolveAuthorizedCustomer(desired);
+    }
+
+    private String resolveScopedHierarchyCustomerCode(String requestedCustomerCode) {
+        String desired = defaultIfBlank(requestedCustomerCode, tenantContext.getCustomerCode());
+        return desired == null ? null : resolveAuthorizedCustomer(desired);
+    }
+
+    private String normalizeHierarchyScope(String scope) {
+        String normalized = defaultIfBlank(scope, null);
+        if (normalized == null) {
+            throw new IllegalArgumentException("Hierarchy scope is required");
+        }
+        normalized = normalized.trim().toUpperCase();
+        if (!WarehouseOptimizeModels.WarehouseLocationHierarchyScope.WAREHOUSE.equals(normalized)
+                && !WarehouseOptimizeModels.WarehouseLocationHierarchyScope.WAREHOUSE_CUSTOMER.equals(normalized)) {
+            throw new IllegalArgumentException("Unsupported hierarchy scope: " + normalized);
+        }
+        return normalized;
+    }
+
+    private WarehouseOptimizeModels.WarehouseLocationHierarchyMapping copyHierarchyMapping(
+            WarehouseOptimizeModels.WarehouseLocationHierarchyMapping mapping) {
+        if (mapping == null) {
+            return null;
+        }
+        WarehouseOptimizeModels.WarehouseLocationHierarchyMapping copy = new WarehouseOptimizeModels.WarehouseLocationHierarchyMapping();
+        copy.setZone(defaultIfBlank(mapping.getZone(), null));
+        copy.setAisle(defaultIfBlank(mapping.getAisle(), null));
+        copy.setBay(defaultIfBlank(mapping.getBay(), null));
+        copy.setSlot(defaultIfBlank(mapping.getSlot(), null));
+        copy.setLevel(defaultIfBlank(mapping.getLevel(), null));
+        return copy;
+    }
+
+    private void validateHierarchyMapping(WarehouseOptimizeModels.WarehouseLocationHierarchyMapping mapping) {
+        if (mapping == null) {
+            throw new IllegalArgumentException("Hierarchy mapping is required");
+        }
+        validateHierarchySource("Zone", mapping.getZone(), false);
+        validateHierarchySource("Aisle", mapping.getAisle(), false);
+        validateHierarchySource("Rack / Bay", mapping.getBay(), true);
+        validateHierarchySource("Position / Slot", mapping.getSlot(), false);
+        validateHierarchySource("Level", mapping.getLevel(), true);
+    }
+
+    private void validateHierarchySource(String label, String source, boolean required) {
+        String normalized = defaultIfBlank(source, null);
+        if (normalized == null) {
+            if (required) {
+                throw new IllegalArgumentException(label + " mapping is required");
+            }
+            return;
+        }
+        if (!ALLOWED_HIERARCHY_SOURCES.contains(normalized.trim().toUpperCase())) {
+            throw new IllegalArgumentException("Unsupported " + label + " mapping source: " + normalized);
+        }
+    }
+
+    private ResolvedHierarchyParts resolveDefaultLocationMasterParts(WarehouseOptimizeModels.OracleLocationMasterRow row) {
+        ResolvedHierarchyParts resolved = new ResolvedHierarchyParts();
+        resolved.zone = trimmed(row.getAreaCode());
+        if (resolved.zone == null) {
+            resolved.invalidReason = "LOC_AREA_COD is blank";
+            return resolved;
+        }
+        resolved.bay = trimmed(row.getPositionCode());
+        resolved.level = defaultIfBlank(trimmed(row.getLevelCode()), "1");
+        resolved.groupKey = resolved.zone;
+        resolved.valid = true;
+        return resolved;
+    }
+
+    private ResolvedHierarchyParts resolveMappedLocationMasterParts(
+            WarehouseOptimizeModels.OracleLocationMasterRow row,
+            WarehouseOptimizeModels.WarehouseLocationHierarchyMapping mapping) {
+        ResolvedHierarchyParts resolved = resolveMappedParts(
+                mapping,
+                trimmed(row.getAreaCode()),
+                trimmed(row.getRackCode()),
+                trimmed(row.getPositionCode()),
+                trimmed(row.getLevelCode()));
+        if (!resolved.valid) {
+            return resolved;
+        }
+        resolved.groupKey = hierarchyGroupKey(resolved.zone, resolved.aisle);
+        return resolved;
+    }
+
+    private ResolvedHierarchyParts resolveMappedStockParts(
+            WarehouseOptimizeModels.OracleStockRow row,
+            WarehouseOptimizeModels.WarehouseLocationHierarchyMapping mapping) {
+        ResolvedHierarchyParts resolved = resolveMappedParts(
+                mapping,
+                trimmed(row.getAreaCode()),
+                trimmed(row.getRackCode()),
+                trimmed(row.getPositionCode()),
+                trimmed(row.getLevelCode()));
+        if (!resolved.valid) {
+            return resolved;
+        }
+        resolved.groupKey = hierarchyGroupKey(resolved.zone, resolved.aisle);
+        return resolved;
+    }
+
+    private ResolvedHierarchyParts resolveMappedParts(
+            WarehouseOptimizeModels.WarehouseLocationHierarchyMapping mapping,
+            String areaCode,
+            String rackCode,
+            String positionCode,
+            String levelCode) {
+        ResolvedHierarchyParts resolved = new ResolvedHierarchyParts();
+        resolved.zone = resolveHierarchySourceValue(mapping.getZone(), areaCode, rackCode, positionCode, levelCode);
+        resolved.aisle = resolveHierarchySourceValue(mapping.getAisle(), areaCode, rackCode, positionCode, levelCode);
+        resolved.bay = resolveHierarchySourceValue(mapping.getBay(), areaCode, rackCode, positionCode, levelCode);
+        resolved.slot = resolveHierarchySourceValue(mapping.getSlot(), areaCode, rackCode, positionCode, levelCode);
+        resolved.level = resolveHierarchySourceValue(mapping.getLevel(), areaCode, rackCode, positionCode, levelCode);
+
+        // When Zone is not used, promote Aisle into the leading display/key slot.
+        if (resolved.zone == null && resolved.aisle != null) {
+            resolved.zone = resolved.aisle;
+            resolved.aisle = null;
+        }
+        if (resolved.bay == null) {
+            resolved.invalidReason = "the mapped Rack / Bay value is blank";
+            return resolved;
+        }
+        if (resolved.level == null) {
+            resolved.invalidReason = "the mapped Level value is blank";
+            return resolved;
+        }
+        resolved.valid = true;
+        return resolved;
+    }
+
+    private String resolveHierarchySourceValue(
+            String source,
+            String areaCode,
+            String rackCode,
+            String positionCode,
+            String levelCode) {
+        String normalized = defaultIfBlank(source, null);
+        if (normalized == null) {
+            return null;
+        }
+        switch (normalized.trim().toUpperCase()) {
+            case "AREA_CODE":
+                return areaCode;
+            case "RACK_CODE":
+                return rackCode;
+            case "POSITION_CODE":
+                return positionCode;
+            case "LEVEL_CODE":
+                return levelCode;
+            default:
+                return null;
+        }
+    }
+
+    private String hierarchyGroupKey(String zone, String aisle) {
+        return defaultIfBlank(zone, "") + "|" + defaultIfBlank(aisle, "");
+    }
+
+    private String areaDisplayLabel(String zone, String aisleCode) {
+        if (defaultIfBlank(aisleCode, null) == null) {
+            return defaultIfBlank(zone, "-");
+        }
+        return defaultIfBlank(zone, "-") + " / " + aisleCode;
     }
 
     private String canonicalLocation(String areaCode, String rackCode, String positionCode, String levelCode) {
         return defaultIfBlank(areaCode, "")
                 + defaultIfBlank(rackCode, "")
                 + defaultIfBlank(positionCode, "")
+                + defaultIfBlank(levelCode, "");
+    }
+
+    private String canonicalLocation(String zone, String aisleCode, String bayCode, String slotCode, String levelCode) {
+        return defaultIfBlank(zone, "")
+                + defaultIfBlank(aisleCode, "")
+                + defaultIfBlank(bayCode, "")
+                + defaultIfBlank(slotCode, "")
                 + defaultIfBlank(levelCode, "");
     }
 
@@ -858,6 +1537,555 @@ public class WarehouseOptimizeService {
         return roundLayoutNumber(positiveValues.get(middle - 1)
                 .add(positiveValues.get(middle))
                 .divide(new BigDecimal("2"), 4, RoundingMode.HALF_UP));
+    }
+
+    private NormalizedMeasurement normalizeMeasurement(
+            BigDecimal rawValue,
+            BigDecimal minAccepted,
+            BigDecimal maxAccepted) {
+        if (rawValue == null || rawValue.compareTo(BigDecimal.ZERO) <= 0) {
+            return new NormalizedMeasurement(null, false);
+        }
+
+        BigDecimal[] divisors = {
+                BigDecimal.ONE,
+                new BigDecimal("10"),
+                new BigDecimal("100"),
+                new BigDecimal("1000")
+        };
+        for (int index = 0; index < divisors.length; index++) {
+            BigDecimal candidate = rawValue.divide(divisors[index], 4, RoundingMode.HALF_UP);
+            if (candidate.compareTo(minAccepted) >= 0 && candidate.compareTo(maxAccepted) <= 0) {
+                return new NormalizedMeasurement(roundLayoutNumber(candidate), index > 0);
+            }
+        }
+
+        return new NormalizedMeasurement(null, false);
+    }
+
+    private BigDecimal stripSpan(int rackCount, BigDecimal bayDepth, BigDecimal aisleWidth) {
+        return bayDepth.multiply(BigDecimal.valueOf(rackCount))
+                .add(aisleWidth.multiply(BigDecimal.valueOf(Math.max(rackCount - 1, 0))));
+    }
+
+    private boolean shouldRotateArea(
+            BigDecimal verticalWidth,
+            BigDecimal verticalHeight,
+            BigDecimal horizontalWidth,
+            BigDecimal horizontalHeight) {
+        BigDecimal verticalLongestSide = verticalWidth.max(verticalHeight);
+        BigDecimal horizontalLongestSide = horizontalWidth.max(horizontalHeight);
+        int longestCompare = verticalLongestSide.compareTo(horizontalLongestSide);
+        if (longestCompare != 0) {
+            return longestCompare > 0;
+        }
+
+        double verticalPenalty = aspectPenalty(verticalWidth, verticalHeight);
+        double horizontalPenalty = aspectPenalty(horizontalWidth, horizontalHeight);
+        if (Double.compare(verticalPenalty, horizontalPenalty) != 0) {
+            return horizontalPenalty < verticalPenalty;
+        }
+        return false;
+    }
+
+    private PackedGrid buildPackedGrid(List<GeneratedAreaLayout> generatedAreas, int columnCount) {
+        int safeColumns = Math.max(1, Math.min(columnCount, Math.max(1, generatedAreas.size())));
+        int rowCount = (int) Math.ceil(generatedAreas.size() / (double) safeColumns);
+        BigDecimal[] columnWidths = new BigDecimal[safeColumns];
+        BigDecimal[] rowHeights = new BigDecimal[rowCount];
+        for (int index = 0; index < safeColumns; index++) {
+            columnWidths[index] = BigDecimal.ZERO;
+        }
+        for (int index = 0; index < rowCount; index++) {
+            rowHeights[index] = BigDecimal.ZERO;
+        }
+
+        for (int index = 0; index < generatedAreas.size(); index++) {
+            GeneratedAreaLayout generatedArea = generatedAreas.get(index);
+            int row = index / safeColumns;
+            int column = index % safeColumns;
+            columnWidths[column] = columnWidths[column].max(zeroIfNull(generatedArea.aisle.getWidth()));
+            rowHeights[row] = rowHeights[row].max(zeroIfNull(generatedArea.aisle.getHeight()));
+        }
+
+        BigDecimal totalWidth = OUTER_PADDING.multiply(new BigDecimal("2"));
+        for (int index = 0; index < columnWidths.length; index++) {
+            totalWidth = totalWidth.add(columnWidths[index]);
+            if (index < columnWidths.length - 1) {
+                totalWidth = totalWidth.add(AREA_GAP);
+            }
+        }
+
+        BigDecimal totalHeight = OUTER_PADDING.multiply(new BigDecimal("2"));
+        for (int index = 0; index < rowHeights.length; index++) {
+            totalHeight = totalHeight.add(rowHeights[index]);
+            if (index < rowHeights.length - 1) {
+                totalHeight = totalHeight.add(AREA_GAP);
+            }
+        }
+
+        PackedGrid grid = new PackedGrid();
+        grid.columns = safeColumns;
+        grid.rowCount = rowCount;
+        grid.columnWidths = columnWidths;
+        grid.rowHeights = rowHeights;
+        grid.totalWidth = roundLayoutNumber(totalWidth);
+        grid.totalHeight = roundLayoutNumber(totalHeight);
+        grid.footprintArea = roundLayoutNumber(grid.totalWidth.multiply(grid.totalHeight));
+        grid.aspectPenalty = aspectPenalty(grid.totalWidth, grid.totalHeight);
+        grid.maxSide = grid.totalWidth.max(grid.totalHeight);
+        return grid;
+    }
+
+    private int comparePackedGrids(PackedGrid left, PackedGrid right) {
+        int areaCompare = left.footprintArea.compareTo(right.footprintArea);
+        if (areaCompare != 0) {
+            return areaCompare;
+        }
+        int penaltyCompare = Double.compare(left.aspectPenalty, right.aspectPenalty);
+        if (penaltyCompare != 0) {
+            return penaltyCompare;
+        }
+        return left.maxSide.compareTo(right.maxSide);
+    }
+
+    private double aspectPenalty(BigDecimal width, BigDecimal height) {
+        double safeWidth = Math.max(0.0001d, zeroIfNull(width).doubleValue());
+        double safeHeight = Math.max(0.0001d, zeroIfNull(height).doubleValue());
+        return Math.abs(Math.log(safeWidth / safeHeight));
+    }
+
+    private MixedDetectionResult detectMixedLowerShelfLevels(
+            String areaCode,
+            List<String> rackCodes,
+            List<GeneratedLocationSeed> areaRows,
+            Map<String, Integer> levelIndexMap) {
+        MixedDetectionResult result = MixedDetectionResult.none();
+        if (levelIndexMap.size() < 3) {
+            return result;
+        }
+
+        Map<Integer, List<BigDecimal>> areaLevelHeights = new LinkedHashMap<>();
+        Map<String, Map<Integer, List<BigDecimal>>> rackLevelHeights = new LinkedHashMap<>();
+        Map<Integer, Integer> areaLevelLocationCounts = new LinkedHashMap<>();
+        Map<String, Map<Integer, Integer>> rackLevelLocationCounts = new LinkedHashMap<>();
+        Map<String, Map<Integer, Set<String>>> rackLevelPositions = new LinkedHashMap<>();
+        for (String rackCode : rackCodes) {
+            rackLevelHeights.put(rackCode, new LinkedHashMap<>());
+            rackLevelLocationCounts.put(rackCode, new LinkedHashMap<>());
+            rackLevelPositions.put(rackCode, new LinkedHashMap<>());
+        }
+
+        for (GeneratedLocationSeed seed : areaRows) {
+            Integer levelOrdinal = levelIndexMap.get(seed.levelCode);
+            if (levelOrdinal == null) {
+                continue;
+            }
+            if (seed.height != null && seed.height.compareTo(BigDecimal.ZERO) > 0) {
+                areaLevelHeights.computeIfAbsent(levelOrdinal, key -> new ArrayList<>()).add(seed.height);
+                rackLevelHeights
+                        .computeIfAbsent(seed.rackCode, key -> new LinkedHashMap<>())
+                        .computeIfAbsent(levelOrdinal, key -> new ArrayList<>())
+                        .add(seed.height);
+            }
+            areaLevelLocationCounts.merge(levelOrdinal, 1, Integer::sum);
+            rackLevelLocationCounts
+                    .computeIfAbsent(seed.rackCode, key -> new LinkedHashMap<>())
+                    .merge(levelOrdinal, 1, Integer::sum);
+            if (seed.positionCode != null) {
+                rackLevelPositions
+                        .computeIfAbsent(seed.rackCode, key -> new LinkedHashMap<>())
+                        .computeIfAbsent(levelOrdinal, key -> new LinkedHashSet<>())
+                        .add(seed.positionCode);
+            }
+        }
+
+        SplitCandidate bestCandidate = null;
+        boolean possibleButUncertain = false;
+        int levelCount = levelIndexMap.size();
+
+        for (int split = 1; split < levelCount; split++) {
+            boolean areaSupportsHeight = false;
+            BigDecimal lowerMedian = BigDecimal.ZERO;
+            BigDecimal upperMedian = BigDecimal.ZERO;
+            BigDecimal lowerBoundaryMedian = BigDecimal.ZERO;
+            BigDecimal upperBoundaryMedian = BigDecimal.ZERO;
+
+            List<BigDecimal> lowerAreaValues = collectHeights(areaLevelHeights, 1, split);
+            List<BigDecimal> upperAreaValues = collectHeights(areaLevelHeights, split + 1, levelCount);
+            if (!lowerAreaValues.isEmpty() && !upperAreaValues.isEmpty()) {
+                lowerMedian = medianPositive(lowerAreaValues, BigDecimal.ZERO);
+                upperMedian = medianPositive(upperAreaValues, BigDecimal.ZERO);
+                areaSupportsHeight = supportsMixedSplit(lowerMedian, upperMedian);
+                if (!areaSupportsHeight && hintsMixedSplit(lowerMedian, upperMedian)) {
+                    possibleButUncertain = true;
+                }
+                lowerBoundaryMedian = medianPositive(
+                        areaLevelHeights.getOrDefault(split, Collections.emptyList()),
+                        BigDecimal.ZERO);
+                upperBoundaryMedian = medianPositive(
+                        areaLevelHeights.getOrDefault(split + 1, Collections.emptyList()),
+                        BigDecimal.ZERO);
+            }
+
+            int usableHeightRacks = 0;
+            int supportingHeightRacks = 0;
+            int usableLocationRacks = 0;
+            int supportingLocationRacks = 0;
+            int usableDensityRacks = 0;
+            int supportingDensityRacks = 0;
+            BigDecimal lowerBoundaryLocationMedian = BigDecimal.ZERO;
+            BigDecimal upperBoundaryLocationMedian = BigDecimal.ZERO;
+            BigDecimal lowerAverageLocationMedian = BigDecimal.ZERO;
+            BigDecimal upperAverageLocationMedian = BigDecimal.ZERO;
+            boolean areaSupportsLocationDensity = false;
+            Integer lowerAreaBoundaryLocationCount = countLevelDensity(areaLevelLocationCounts, split);
+            Integer upperAreaBoundaryLocationCount = countLevelDensity(areaLevelLocationCounts, split + 1);
+            BigDecimal lowerAreaAverageLocationCount = averageLevelDensity(areaLevelLocationCounts, 1, split);
+            BigDecimal upperAreaAverageLocationCount = averageLevelDensity(areaLevelLocationCounts, split + 1, levelCount);
+            if (lowerAreaBoundaryLocationCount != null && upperAreaBoundaryLocationCount != null
+                    && lowerAreaAverageLocationCount != null && upperAreaAverageLocationCount != null) {
+                lowerBoundaryLocationMedian = BigDecimal.valueOf(lowerAreaBoundaryLocationCount);
+                upperBoundaryLocationMedian = BigDecimal.valueOf(upperAreaBoundaryLocationCount);
+                lowerAverageLocationMedian = lowerAreaAverageLocationCount;
+                upperAverageLocationMedian = upperAreaAverageLocationCount;
+                areaSupportsLocationDensity = supportsMixedDensityCounts(
+                        lowerBoundaryLocationMedian,
+                        upperBoundaryLocationMedian,
+                        lowerAverageLocationMedian,
+                        upperAverageLocationMedian);
+                if (!areaSupportsLocationDensity && hintsMixedDensityCounts(
+                        lowerBoundaryLocationMedian,
+                        upperBoundaryLocationMedian,
+                        lowerAverageLocationMedian,
+                        upperAverageLocationMedian)) {
+                    possibleButUncertain = true;
+                }
+            }
+
+            List<BigDecimal> lowerBoundaryLocationCounts = new ArrayList<>();
+            List<BigDecimal> upperBoundaryLocationCounts = new ArrayList<>();
+            List<BigDecimal> lowerAverageLocationCounts = new ArrayList<>();
+            List<BigDecimal> upperAverageLocationCounts = new ArrayList<>();
+            List<BigDecimal> lowerBoundaryPositionCounts = new ArrayList<>();
+            List<BigDecimal> upperBoundaryPositionCounts = new ArrayList<>();
+            List<BigDecimal> lowerAveragePositionCounts = new ArrayList<>();
+            List<BigDecimal> upperAveragePositionCounts = new ArrayList<>();
+            for (Map<Integer, List<BigDecimal>> rackHeights : rackLevelHeights.values()) {
+                List<BigDecimal> lowerRackValues = collectHeights(rackHeights, 1, split);
+                List<BigDecimal> upperRackValues = collectHeights(rackHeights, split + 1, levelCount);
+                if (lowerRackValues.isEmpty() || upperRackValues.isEmpty()) {
+                    continue;
+                }
+                usableHeightRacks++;
+                BigDecimal lowerRackMedian = medianPositive(lowerRackValues, BigDecimal.ZERO);
+                BigDecimal upperRackMedian = medianPositive(upperRackValues, BigDecimal.ZERO);
+                if (supportsMixedSplit(lowerRackMedian, upperRackMedian)) {
+                    supportingHeightRacks++;
+                } else if (hintsMixedSplit(lowerRackMedian, upperRackMedian)) {
+                    possibleButUncertain = true;
+                }
+            }
+
+            for (Map<Integer, Integer> rackLocationCounts : rackLevelLocationCounts.values()) {
+                Integer lowerBoundaryCount = countLevelDensity(rackLocationCounts, split);
+                Integer upperBoundaryCount = countLevelDensity(rackLocationCounts, split + 1);
+                BigDecimal lowerAverageCount = averageLevelDensity(rackLocationCounts, 1, split);
+                BigDecimal upperAverageCount = averageLevelDensity(rackLocationCounts, split + 1, levelCount);
+                if (lowerBoundaryCount == null || upperBoundaryCount == null
+                        || lowerAverageCount == null || upperAverageCount == null) {
+                    continue;
+                }
+
+                usableLocationRacks++;
+                BigDecimal lowerBoundary = BigDecimal.valueOf(lowerBoundaryCount);
+                BigDecimal upperBoundary = BigDecimal.valueOf(upperBoundaryCount);
+                lowerBoundaryLocationCounts.add(lowerBoundary);
+                upperBoundaryLocationCounts.add(upperBoundary);
+                lowerAverageLocationCounts.add(lowerAverageCount);
+                upperAverageLocationCounts.add(upperAverageCount);
+
+                if (supportsMixedDensityCounts(lowerBoundary, upperBoundary, lowerAverageCount, upperAverageCount)) {
+                    supportingLocationRacks++;
+                } else if (hintsMixedDensityCounts(lowerBoundary, upperBoundary, lowerAverageCount, upperAverageCount)) {
+                    possibleButUncertain = true;
+                }
+            }
+
+            for (Map<Integer, Set<String>> rackPositions : rackLevelPositions.values()) {
+                Integer lowerBoundaryCount = distinctPositionCount(rackPositions, split);
+                Integer upperBoundaryCount = distinctPositionCount(rackPositions, split + 1);
+                BigDecimal lowerAverageCount = averagePositionCount(rackPositions, 1, split);
+                BigDecimal upperAverageCount = averagePositionCount(rackPositions, split + 1, levelCount);
+                if (lowerBoundaryCount == null || upperBoundaryCount == null
+                        || lowerAverageCount == null || upperAverageCount == null) {
+                    continue;
+                }
+
+                usableDensityRacks++;
+                BigDecimal lowerBoundary = BigDecimal.valueOf(lowerBoundaryCount);
+                BigDecimal upperBoundary = BigDecimal.valueOf(upperBoundaryCount);
+                lowerBoundaryPositionCounts.add(lowerBoundary);
+                upperBoundaryPositionCounts.add(upperBoundary);
+                lowerAveragePositionCounts.add(lowerAverageCount);
+                upperAveragePositionCounts.add(upperAverageCount);
+
+                if (supportsMixedDensityCounts(lowerBoundary, upperBoundary, lowerAverageCount, upperAverageCount)) {
+                    supportingDensityRacks++;
+                } else if (hintsMixedDensityCounts(lowerBoundary, upperBoundary, lowerAverageCount, upperAverageCount)) {
+                    possibleButUncertain = true;
+                }
+            }
+
+            double heightSupportRatio = usableHeightRacks == 0 ? 0d : supportingHeightRacks / (double) usableHeightRacks;
+            double locationSupportRatio = usableLocationRacks == 0 ? 0d : supportingLocationRacks / (double) usableLocationRacks;
+            double densitySupportRatio = usableDensityRacks == 0 ? 0d : supportingDensityRacks / (double) usableDensityRacks;
+            boolean areaSupportsDensity = false;
+            BigDecimal lowerBoundaryPositionMedian = BigDecimal.ZERO;
+            BigDecimal upperBoundaryPositionMedian = BigDecimal.ZERO;
+            BigDecimal lowerAveragePositionMedian = BigDecimal.ZERO;
+            BigDecimal upperAveragePositionMedian = BigDecimal.ZERO;
+            if (!lowerBoundaryPositionCounts.isEmpty() && !upperBoundaryPositionCounts.isEmpty()
+                    && !lowerAveragePositionCounts.isEmpty() && !upperAveragePositionCounts.isEmpty()) {
+                lowerBoundaryPositionMedian = medianPositive(lowerBoundaryPositionCounts, BigDecimal.ZERO);
+                upperBoundaryPositionMedian = medianPositive(upperBoundaryPositionCounts, BigDecimal.ZERO);
+                lowerAveragePositionMedian = medianPositive(lowerAveragePositionCounts, BigDecimal.ZERO);
+                upperAveragePositionMedian = medianPositive(upperAveragePositionCounts, BigDecimal.ZERO);
+                areaSupportsDensity = supportsMixedDensityCounts(
+                        lowerBoundaryPositionMedian,
+                        upperBoundaryPositionMedian,
+                        lowerAveragePositionMedian,
+                        upperAveragePositionMedian);
+                if (!areaSupportsDensity && hintsMixedDensityCounts(
+                        lowerBoundaryPositionMedian,
+                        upperBoundaryPositionMedian,
+                        lowerAveragePositionMedian,
+                        upperAveragePositionMedian)) {
+                    possibleButUncertain = true;
+                }
+            }
+
+            boolean splitSupported = (areaSupportsHeight && heightSupportRatio >= MIXED_RACK_SUPPORT_THRESHOLD)
+                    || ((areaSupportsLocationDensity || areaSupportsDensity)
+                    && Math.max(locationSupportRatio, densitySupportRatio) >= MIXED_RACK_SUPPORT_THRESHOLD);
+            if (splitSupported) {
+                SplitCandidate candidate = new SplitCandidate();
+                candidate.lowerShelfLevels = split;
+                candidate.locationBoundaryGap = lowerBoundaryLocationMedian.subtract(upperBoundaryLocationMedian);
+                candidate.locationBoundaryRatioGap = upperBoundaryLocationMedian.compareTo(BigDecimal.ZERO) <= 0
+                        ? 0d
+                        : lowerBoundaryLocationMedian.divide(upperBoundaryLocationMedian, 6, RoundingMode.HALF_UP).doubleValue() - 1d;
+                candidate.locationAverageGap = lowerAverageLocationMedian.subtract(upperAverageLocationMedian);
+                candidate.boundaryGap = upperBoundaryMedian.subtract(lowerBoundaryMedian);
+                candidate.boundaryRatioGap = upperBoundaryMedian.compareTo(BigDecimal.ZERO) <= 0
+                        ? 0d
+                        : 1d - lowerBoundaryMedian.divide(upperBoundaryMedian, 6, RoundingMode.HALF_UP).doubleValue();
+                candidate.positionBoundaryGap = lowerBoundaryPositionMedian.subtract(upperBoundaryPositionMedian);
+                candidate.positionBoundaryRatioGap = upperBoundaryPositionMedian.compareTo(BigDecimal.ZERO) <= 0
+                        ? 0d
+                        : lowerBoundaryPositionMedian.divide(upperBoundaryPositionMedian, 6, RoundingMode.HALF_UP).doubleValue() - 1d;
+                candidate.positionAverageGap = lowerAveragePositionMedian.subtract(upperAveragePositionMedian);
+                candidate.heightGap = upperMedian.subtract(lowerMedian);
+                candidate.ratioGap = upperMedian.compareTo(BigDecimal.ZERO) <= 0
+                        ? 0d
+                        : 1d - lowerMedian.divide(upperMedian, 6, RoundingMode.HALF_UP).doubleValue();
+                candidate.supportRatio = Math.max(heightSupportRatio, Math.max(locationSupportRatio, densitySupportRatio));
+                if (bestCandidate == null || compareSplitCandidates(candidate, bestCandidate) > 0) {
+                    bestCandidate = candidate;
+                }
+            } else if (areaSupportsHeight || areaSupportsLocationDensity || areaSupportsDensity
+                    || heightSupportRatio > 0d || locationSupportRatio > 0d || densitySupportRatio > 0d) {
+                possibleButUncertain = true;
+            }
+        }
+
+        if (bestCandidate != null) {
+            result.lowerShelfLevels = bestCandidate.lowerShelfLevels;
+            return result;
+        }
+
+        if (possibleButUncertain) {
+            result.uncertain = true;
+            result.warnings.add("Area " + areaCode + " may contain mixed shelf-to-rack levels, but the signal was not clear enough to auto-apply lower shelf levels.");
+        }
+        return result;
+    }
+
+    private List<BigDecimal> collectHeights(
+            Map<Integer, List<BigDecimal>> heightsByLevel,
+            int levelFrom,
+            int levelTo) {
+        List<BigDecimal> values = new ArrayList<>();
+        for (int level = levelFrom; level <= levelTo; level++) {
+            values.addAll(heightsByLevel.getOrDefault(level, Collections.emptyList()));
+        }
+        return values;
+    }
+
+    private boolean supportsMixedSplit(BigDecimal lowerMedian, BigDecimal upperMedian) {
+        if (lowerMedian == null || upperMedian == null || upperMedian.compareTo(BigDecimal.ZERO) <= 0) {
+            return false;
+        }
+        BigDecimal heightGap = upperMedian.subtract(lowerMedian);
+        if (heightGap.compareTo(MIN_MIXED_HEIGHT_GAP) < 0) {
+            return false;
+        }
+        BigDecimal ratio = lowerMedian.divide(upperMedian, 6, RoundingMode.HALF_UP);
+        return ratio.compareTo(MAX_MIXED_LOWER_RATIO) <= 0;
+    }
+
+    private boolean hintsMixedSplit(BigDecimal lowerMedian, BigDecimal upperMedian) {
+        if (lowerMedian == null || upperMedian == null || upperMedian.compareTo(BigDecimal.ZERO) <= 0) {
+            return false;
+        }
+        BigDecimal heightGap = upperMedian.subtract(lowerMedian);
+        if (heightGap.compareTo(BigDecimal.ZERO) <= 0) {
+            return false;
+        }
+        BigDecimal ratio = lowerMedian.divide(upperMedian, 6, RoundingMode.HALF_UP);
+        return heightGap.compareTo(MIXED_HEIGHT_HINT_GAP) >= 0 || ratio.compareTo(MIXED_HEIGHT_HINT_RATIO) <= 0;
+    }
+
+    private Integer distinctPositionCount(Map<Integer, Set<String>> positionsByLevel, int level) {
+        Set<String> values = positionsByLevel.get(level);
+        if (values == null || values.isEmpty()) {
+            return null;
+        }
+        return values.size();
+    }
+
+    private BigDecimal averagePositionCount(
+            Map<Integer, Set<String>> positionsByLevel,
+            int levelFrom,
+            int levelTo) {
+        BigDecimal total = BigDecimal.ZERO;
+        int count = 0;
+        for (int level = levelFrom; level <= levelTo; level++) {
+            Set<String> positions = positionsByLevel.get(level);
+            if (positions == null || positions.isEmpty()) {
+                continue;
+            }
+            total = total.add(BigDecimal.valueOf(positions.size()));
+            count++;
+        }
+        if (count == 0) {
+            return null;
+        }
+        return total.divide(BigDecimal.valueOf(count), 4, RoundingMode.HALF_UP);
+    }
+
+    private Integer countLevelDensity(Map<Integer, Integer> countsByLevel, int level) {
+        Integer count = countsByLevel.get(level);
+        if (count == null || count <= 0) {
+            return null;
+        }
+        return count;
+    }
+
+    private BigDecimal averageLevelDensity(
+            Map<Integer, Integer> countsByLevel,
+            int levelFrom,
+            int levelTo) {
+        BigDecimal total = BigDecimal.ZERO;
+        int count = 0;
+        for (int level = levelFrom; level <= levelTo; level++) {
+            Integer value = countsByLevel.get(level);
+            if (value == null || value <= 0) {
+                continue;
+            }
+            total = total.add(BigDecimal.valueOf(value));
+            count++;
+        }
+        if (count == 0) {
+            return null;
+        }
+        return total.divide(BigDecimal.valueOf(count), 4, RoundingMode.HALF_UP);
+    }
+
+    private boolean supportsMixedDensityCounts(
+            BigDecimal lowerBoundaryCount,
+            BigDecimal upperBoundaryCount,
+            BigDecimal lowerAverageCount,
+            BigDecimal upperAverageCount) {
+        if (lowerBoundaryCount == null || upperBoundaryCount == null
+                || lowerAverageCount == null || upperAverageCount == null
+                || upperBoundaryCount.compareTo(BigDecimal.ZERO) <= 0) {
+            return false;
+        }
+        BigDecimal boundaryGap = lowerBoundaryCount.subtract(upperBoundaryCount);
+        if (boundaryGap.compareTo(MIN_POSITION_BOUNDARY_GAP) < 0) {
+            return false;
+        }
+        BigDecimal boundaryRatio = lowerBoundaryCount.divide(upperBoundaryCount, 6, RoundingMode.HALF_UP);
+        if (boundaryRatio.compareTo(MIN_POSITION_BOUNDARY_RATIO) < 0) {
+            return false;
+        }
+        return lowerAverageCount.subtract(upperAverageCount).compareTo(MIN_POSITION_AVERAGE_GAP) >= 0;
+    }
+
+    private boolean hintsMixedDensityCounts(
+            BigDecimal lowerBoundaryCount,
+            BigDecimal upperBoundaryCount,
+            BigDecimal lowerAverageCount,
+            BigDecimal upperAverageCount) {
+        if (lowerBoundaryCount == null || upperBoundaryCount == null
+                || lowerAverageCount == null || upperAverageCount == null
+                || upperBoundaryCount.compareTo(BigDecimal.ZERO) <= 0) {
+            return false;
+        }
+        BigDecimal boundaryGap = lowerBoundaryCount.subtract(upperBoundaryCount);
+        BigDecimal boundaryRatio = lowerBoundaryCount.divide(upperBoundaryCount, 6, RoundingMode.HALF_UP);
+        return boundaryGap.compareTo(BigDecimal.ZERO) > 0
+                || boundaryRatio.compareTo(POSITION_HINT_RATIO) >= 0
+                || lowerAverageCount.compareTo(upperAverageCount) > 0;
+    }
+
+    private int compareSplitCandidates(SplitCandidate left, SplitCandidate right) {
+        int locationBoundaryGapCompare = left.locationBoundaryGap.compareTo(right.locationBoundaryGap);
+        if (locationBoundaryGapCompare != 0) {
+            return locationBoundaryGapCompare;
+        }
+        int locationBoundaryRatioCompare = Double.compare(left.locationBoundaryRatioGap, right.locationBoundaryRatioGap);
+        if (locationBoundaryRatioCompare != 0) {
+            return locationBoundaryRatioCompare;
+        }
+        int locationAverageGapCompare = left.locationAverageGap.compareTo(right.locationAverageGap);
+        if (locationAverageGapCompare != 0) {
+            return locationAverageGapCompare;
+        }
+        int positionBoundaryGapCompare = left.positionBoundaryGap.compareTo(right.positionBoundaryGap);
+        if (positionBoundaryGapCompare != 0) {
+            return positionBoundaryGapCompare;
+        }
+        int positionBoundaryRatioCompare = Double.compare(left.positionBoundaryRatioGap, right.positionBoundaryRatioGap);
+        if (positionBoundaryRatioCompare != 0) {
+            return positionBoundaryRatioCompare;
+        }
+        int positionAverageGapCompare = left.positionAverageGap.compareTo(right.positionAverageGap);
+        if (positionAverageGapCompare != 0) {
+            return positionAverageGapCompare;
+        }
+        int boundaryGapCompare = left.boundaryGap.compareTo(right.boundaryGap);
+        if (boundaryGapCompare != 0) {
+            return boundaryGapCompare;
+        }
+        int boundaryRatioCompare = Double.compare(left.boundaryRatioGap, right.boundaryRatioGap);
+        if (boundaryRatioCompare != 0) {
+            return boundaryRatioCompare;
+        }
+        int gapCompare = left.heightGap.compareTo(right.heightGap);
+        if (gapCompare != 0) {
+            return gapCompare;
+        }
+        int ratioCompare = Double.compare(left.ratioGap, right.ratioGap);
+        if (ratioCompare != 0) {
+            return ratioCompare;
+        }
+        int lowerShelfCompare = Integer.compare(left.lowerShelfLevels, right.lowerShelfLevels);
+        if (lowerShelfCompare != 0) {
+            return lowerShelfCompare;
+        }
+        return Double.compare(left.supportRatio, right.supportRatio);
     }
 
     private BigDecimal roundLayoutNumber(BigDecimal value) {
@@ -927,7 +2155,8 @@ public class WarehouseOptimizeService {
             Long profileId,
             List<WarehouseOptimizeModels.WarehouseLayoutLocation> viewerLocations,
             String customerCode,
-            List<Map<String, Object>> stockRows,
+            List<WarehouseOptimizeModels.OracleStockRow> stockRows,
+            WarehouseOptimizeModels.WarehouseLocationHierarchyMapping hierarchyMapping,
             LocalDateTime requestedCursor,
             boolean includeEmptyLayoutLocations) {
         List<WarehouseOptimizeModels.WarehouseLayoutLocation> effectiveLocations =
@@ -949,8 +2178,9 @@ public class WarehouseOptimizeService {
         List<String> unmatchedStockLocations = new ArrayList<>();
         LocalDateTime cursor = requestedCursor;
 
-        for (Map<String, Object> row : stockRows) {
-            String locationCode = stringValue(row.get("location"));
+        List<ResolvedOracleStockRow> resolvedStockRows = resolveStockRows(stockRows, hierarchyMapping, unmatchedStockLocations);
+        for (ResolvedOracleStockRow row : resolvedStockRows) {
+            String locationCode = row.locationCode;
             WarehouseOptimizeModels.WarehouseLayoutLocation layoutLocation = layoutMap.get(locationCode);
             if (layoutLocation == null) {
                 unmatchedStockLocations.add(locationCode);
@@ -958,12 +2188,12 @@ public class WarehouseOptimizeService {
             }
 
             WarehouseOptimizeModels.LiveLocationState state = stateMap.computeIfAbsent(locationCode, key -> createBaseState(layoutLocation, customerCode));
-            state.setPhysicalQty(zeroIfNull(state.getPhysicalQty()).add(decimalValue(row.get("physicalQty"))));
-            state.setAvailableQty(zeroIfNull(state.getAvailableQty()).add(decimalValue(row.get("availableQty"))));
+            state.setPhysicalQty(zeroIfNull(state.getPhysicalQty()).add(zeroIfNull(row.physicalQty)));
+            state.setAvailableQty(zeroIfNull(state.getAvailableQty()).add(zeroIfNull(row.availableQty)));
             if (state.getProductCode() == null || state.getProductCode().isEmpty()) {
-                state.setProductCode(stringValue(row.get("productCode")));
+                state.setProductCode(row.productCode);
             }
-            LocalDateTime updatedAt = (LocalDateTime) row.get("updatedAt");
+            LocalDateTime updatedAt = row.updatedAt;
             if (updatedAt != null && (state.getUpdatedAt() == null || updatedAt.isAfter(state.getUpdatedAt()))) {
                 state.setUpdatedAt(updatedAt);
             }
@@ -1016,6 +2246,51 @@ public class WarehouseOptimizeService {
         snapshot.getDiagnostics().setUnmatchedLayoutLocations(unmatchedLayoutLocations);
         snapshot.getDiagnostics().setUnmatchedStockLocations(unmatchedStockLocations);
         return snapshot;
+    }
+
+    private List<ResolvedOracleStockRow> resolveStockRows(
+            List<WarehouseOptimizeModels.OracleStockRow> stockRows,
+            WarehouseOptimizeModels.WarehouseLocationHierarchyMapping hierarchyMapping,
+            List<String> invalidStockLocations) {
+        if (stockRows == null || stockRows.isEmpty()) {
+            return Collections.emptyList();
+        }
+
+        Map<String, ResolvedOracleStockRow> aggregated = new LinkedHashMap<>();
+        for (WarehouseOptimizeModels.OracleStockRow stockRow : stockRows) {
+            String locationCode;
+            if (hierarchyMapping == null) {
+                locationCode = canonicalLocation(
+                        trimmed(stockRow.getAreaCode()),
+                        trimmed(stockRow.getRackCode()),
+                        trimmed(stockRow.getPositionCode()),
+                        trimmed(stockRow.getLevelCode()));
+            } else {
+                ResolvedHierarchyParts resolved = resolveMappedStockParts(stockRow, hierarchyMapping);
+                if (!resolved.valid) {
+                    invalidStockLocations.add(defaultIfBlank(trimmed(stockRow.getLocationCode()), "(blank ST_LOC_COD)"));
+                    continue;
+                }
+                locationCode = canonicalLocation(resolved.zone, resolved.aisle, resolved.bay, resolved.slot, resolved.level);
+            }
+
+            String aggregateKey = locationCode + "\u0000" + defaultIfBlank(trimmed(stockRow.getProductCode()), "");
+            ResolvedOracleStockRow aggregate = aggregated.computeIfAbsent(aggregateKey, key -> {
+                ResolvedOracleStockRow created = new ResolvedOracleStockRow();
+                created.locationCode = locationCode;
+                created.productCode = trimmed(stockRow.getProductCode());
+                created.physicalQty = BigDecimal.ZERO;
+                created.availableQty = BigDecimal.ZERO;
+                return created;
+            });
+            aggregate.physicalQty = zeroIfNull(aggregate.physicalQty).add(zeroIfNull(stockRow.getPhysicalQty()));
+            aggregate.availableQty = zeroIfNull(aggregate.availableQty).add(zeroIfNull(stockRow.getAvailableQty()));
+            if (stockRow.getUpdatedAt() != null
+                    && (aggregate.updatedAt == null || stockRow.getUpdatedAt().isAfter(aggregate.updatedAt))) {
+                aggregate.updatedAt = stockRow.getUpdatedAt();
+            }
+        }
+        return new ArrayList<>(aggregated.values());
     }
 
     private List<WarehouseOptimizeModels.WarehouseLayoutLocation> resolveViewerLocations(
@@ -1231,10 +2506,13 @@ public class WarehouseOptimizeService {
 
     private static class GeneratedLocationSeed {
         private String locationCode;
+        private String groupKey;
         private String areaCode;
+        private String aisleCode;
         private String areaName;
         private String rackCode;
         private String positionCode;
+        private String slotCode;
         private String levelCode;
         private String sourceRackCode;
         private String sourcePositionCode;
@@ -1242,10 +2520,112 @@ public class WarehouseOptimizeService {
         private String canonicalLocation;
         private BigDecimal length;
         private BigDecimal width;
+        private BigDecimal height;
+        private boolean dimensionNormalized;
+        private boolean heightNormalized;
+    }
+
+    private static class ResolvedHierarchyParts {
+        private boolean valid;
+        private String invalidReason;
+        private String zone;
+        private String aisle;
+        private String bay;
+        private String slot;
+        private String level;
+        private String groupKey;
+    }
+
+    private static class ResolvedOracleStockRow {
+        private String locationCode;
+        private String productCode;
+        private BigDecimal physicalQty;
+        private BigDecimal availableQty;
+        private LocalDateTime updatedAt;
     }
 
     private static class GeneratedAreaLayout {
         private WarehouseOptimizeModels.WarehouseAisle aisle;
         private int rackCount;
+        private boolean rotated;
+        private boolean mixedDetected;
+        private boolean mixedUncertain;
+        private List<String> warnings = new ArrayList<>();
+    }
+
+    private static class NormalizedMeasurement {
+        private final BigDecimal value;
+        private final boolean scaled;
+
+        private NormalizedMeasurement(BigDecimal value, boolean scaled) {
+            this.value = value;
+            this.scaled = scaled;
+        }
+    }
+
+    private static class MixedDetectionResult {
+        private int lowerShelfLevels;
+        private boolean uncertain;
+        private List<String> warnings = new ArrayList<>();
+
+        private static MixedDetectionResult none() {
+            return new MixedDetectionResult();
+        }
+    }
+
+    private static class SplitCandidate {
+        private int lowerShelfLevels;
+        private BigDecimal locationBoundaryGap;
+        private double locationBoundaryRatioGap;
+        private BigDecimal locationAverageGap;
+        private BigDecimal positionBoundaryGap;
+        private double positionBoundaryRatioGap;
+        private BigDecimal positionAverageGap;
+        private BigDecimal boundaryGap;
+        private double boundaryRatioGap;
+        private BigDecimal heightGap;
+        private double ratioGap;
+        private double supportRatio;
+    }
+
+    private static class PositionLayoutPlan {
+        private int structuralPositionCount;
+        private Map<String, PositionPlacement> placements = new HashMap<>();
+    }
+
+    private static class PositionPlacement {
+        private int positionOrdinal;
+        private BigDecimal axisOffset;
+        private BigDecimal axisSpan;
+    }
+
+    private static class RackPackingPlan {
+        private int rackRows;
+        private int racksPerRow;
+        private BigDecimal width;
+        private BigDecimal height;
+        private BigDecimal maxSide;
+        private BigDecimal footprintArea;
+        private double aspectPenalty;
+
+        private int rackRow(int rackIndex) {
+            return rackIndex / Math.max(racksPerRow, 1);
+        }
+
+        private int rackColumn(int rackIndex) {
+            return rackIndex % Math.max(racksPerRow, 1);
+        }
+    }
+
+    private static class PackedGrid {
+        private int columns;
+        private int rowCount;
+        private BigDecimal[] columnWidths;
+        private BigDecimal[] rowHeights;
+        private BigDecimal totalWidth;
+        private BigDecimal totalHeight;
+        private BigDecimal footprintArea;
+        private BigDecimal maxSide;
+        private double aspectPenalty;
     }
 }

@@ -248,6 +248,61 @@ test('3d live shows occupied-empty colors and searchable stock details', async (
   await expect(page.locator('.status-card').filter({ hasText: 'Search Results' })).not.toContainText(/no filter/i);
 });
 
+test('3d sync waits for a valid customer when an old global customer filter is stored', async ({ page }) => {
+  test.setTimeout(180000);
+
+  await loginAsAdminAndEnterPreferredTenant(page);
+
+  await page.evaluate(() => {
+    localStorage.setItem('warehouse_optimize_customer_code', 'STALE-CUSTOMER');
+  });
+
+  await page.route('**/api/v1/warehouse-optimize/customers', async route => {
+    await new Promise(resolve => setTimeout(resolve, 1500));
+    await route.continue();
+  });
+
+  let syncRequestCustomer: string | null = null;
+  await page.route('**/api/v1/warehouse-optimize/viewer/*/sync-stock', async route => {
+    const payload = route.request().postDataJSON() as { customerCode?: string } | null;
+    syncRequestCustomer = payload?.customerCode ?? null;
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        status: 'SUCCESS',
+        data: {
+          profileId: 1,
+          customerCode: syncRequestCustomer ?? 'TESA',
+          syncedAt: '2026-07-02T09:00:00',
+          cursor: '2026-07-02T09:00:00',
+          locations: [],
+          diagnostics: {
+            unmatchedLayoutLocations: [],
+            unmatchedStockLocations: []
+          }
+        },
+        totalRecords: 1,
+        page: 0,
+        size: 1,
+        messages: []
+      })
+    });
+  });
+
+  await page.goto('/warehouse-optimize/view-3d');
+  await expect(page.getByRole('heading', { name: /3d live/i })).toBeVisible();
+
+  const syncButton = page.getByRole('button', { name: /sync stock data/i });
+  await expect(syncButton).toBeDisabled({ timeout: 1000 });
+  await expect(syncButton).toBeEnabled({ timeout: 45000 });
+
+  await syncButton.click();
+  await expect(page.locator('.sync-state')).toContainText(/synced 0 occupied locations/i, { timeout: 30000 });
+  expect(syncRequestCustomer).not.toBe('STALE-CUSTOMER');
+  expect(syncRequestCustomer).toBeTruthy();
+});
+
 test('working-status zones drawn in design render live badges in 3d', async ({ page }) => {
   test.setTimeout(180000);
 
